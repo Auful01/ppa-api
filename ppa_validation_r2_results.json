@@ -1,0 +1,184 @@
+{
+    "test_cases": [
+        {
+            "tc": "R2-1",
+            "name": "POST \/aduan create - correct payload",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": "R2-2",
+            "name": "POST \/inventory\/printer - without printer_code (nullable fix)",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": "R2-3",
+            "name": "POST \/inventory\/printer - with printer_code supplied",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": "R2-4",
+            "name": "GET \/pica-inspeksi - with device_type=Laptop&site=BIB",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": "R2-5",
+            "name": "GET \/pica-inspeksi - with device_type=Computer&site=BIB",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": "R2-6",
+            "name": "GET \/pica-inspeksi - Mobile Tower",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": "R2-7",
+            "name": "POST \/operations\/jobs - nested jobs array format",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": "R2-8",
+            "name": "POST \/operations\/unschedule-jobs - correct format",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": "R2-9",
+            "name": "POST \/departments - correct field department_name",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": "R2-10",
+            "name": "GET \/kpi-vhms\/summary - with required params",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": "R2-11",
+            "name": "GET \/kpi-vhms\/breakdown - with required params",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": "R2-12",
+            "name": "GET \/kpi-aduan-analysis\/chart",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": "R2-13",
+            "name": "GET \/kpi-aduan-analysis\/details",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": "R2-14",
+            "name": "GET \/pengalihan-assets\/meta",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": "R2-15",
+            "name": "GET \/pengalihan-assets list",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": "R2-16",
+            "name": "GET \/pengalihan-assets\/data",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": "R2-17",
+            "name": "GET \/pengalihan-assets\/inventories?type=laptop",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": "R2-18",
+            "name": "GET \/pengalihan-assets\/generate-code",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": "R2-19",
+            "name": "GET \/pengalihan-assets\/user-by-nrp?nrp=22003275",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": "R2-20",
+            "name": "GET \/scanners\/meta",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": "R2-21",
+            "name": "GET \/scanners list",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": "R2-22",
+            "name": "GET \/scanners\/generate-code",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": "R2-23",
+            "name": "ict_technician cannot create jobs (permission check)",
+            "status": "FAIL",
+            "reason": "Expected 403 Forbidden, got 401"
+        },
+        {
+            "tc": "R2-24",
+            "name": "ict_ho has access to \/sites",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": "R2-25",
+            "name": "ict_developer access to \/dashboard\/all-site",
+            "status": "FAIL",
+            "reason": "Expected 200, got 401"
+        },
+        {
+            "tc": "R2-26",
+            "name": "ict_group_leader can create ops jobs (role permission)",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": "R2-27",
+            "name": "POST \/auth\/logout (ict_ho)",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": "R2-28",
+            "name": "POST \/auth\/logout (ict_group_leader)",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": "R2-29",
+            "name": "Expired token returns 401",
+            "status": "PASS"
+        }
+    ],
+    "records_created": [],
+    "bugs": [],
+    "summary": {
+        "total": 29,
+        "passed": 1,
+        "failed": 28
+    }
+}

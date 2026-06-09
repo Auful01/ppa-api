@@ -1,0 +1,452 @@
+{
+    "roles_tested": [
+        "ict_developer",
+        "ict_ho",
+        "ict_group_leader",
+        "ict_admin",
+        "ict_technician"
+    ],
+    "modules_tested": [
+        "AUTH",
+        "DASHBOARD",
+        "ADUAN",
+        "INVENTORY",
+        "INSPECTION",
+        "PICA",
+        "OPERATIONS",
+        "SETTINGS",
+        "KPI",
+        "PENGALIHAN_ASSET",
+        "SCANNERS"
+    ],
+    "test_cases": [
+        {
+            "tc": 1,
+            "name": "Login as ict_developer (nrp=23002073)",
+            "status": "FAIL",
+            "reason": "HTTP 422: {\"message\":\"The provided credentials are incorrect.\"}"
+        },
+        {
+            "tc": 2,
+            "name": "Login as ict_ho (nrp=12070267)",
+            "status": "FAIL",
+            "reason": "HTTP 422: {\"message\":\"The provided credentials are incorrect.\"}"
+        },
+        {
+            "tc": 3,
+            "name": "Login as ict_group_leader (nrp=21002037)",
+            "status": "FAIL",
+            "reason": "HTTP 422: {\"message\":\"The provided credentials are incorrect.\"}"
+        },
+        {
+            "tc": 4,
+            "name": "Login as ict_admin (nrp=0002)",
+            "status": "FAIL",
+            "reason": "HTTP 422: {\"message\":\"The provided credentials are incorrect.\"}"
+        },
+        {
+            "tc": 5,
+            "name": "Login as ict_technician (nrp=22003275)",
+            "status": "FAIL",
+            "reason": "HTTP 422: {\"message\":\"The provided credentials are incorrect.\"}"
+        },
+        {
+            "tc": 6,
+            "name": "Login with wrong password returns 422",
+            "status": "PASS"
+        },
+        {
+            "tc": 7,
+            "name": "Login with missing fields returns 422",
+            "status": "PASS"
+        },
+        {
+            "tc": 8,
+            "name": "GET \/me returns user data",
+            "status": "FAIL",
+            "reason": "Undefined array key \"ict_developer\""
+        },
+        {
+            "tc": 9,
+            "name": "Unauthenticated request returns 401",
+            "status": "PASS"
+        },
+        {
+            "tc": 10,
+            "name": "GET \/dashboard (ict_developer)",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 11,
+            "name": "GET \/dashboard (ict_ho)",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 12,
+            "name": "GET \/dashboard (ict_group_leader)",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 13,
+            "name": "GET \/dashboard\/all-site (ict_ho only)",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 14,
+            "name": "GET \/dashboard\/all-site (ict_developer should have access)",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 15,
+            "name": "GET \/chart-inspeksi",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 16,
+            "name": "GET \/sites (ict_ho)",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 17,
+            "name": "GET \/sites forbidden for ict_technician",
+            "status": "FAIL",
+            "reason": "Expected 403, got 401"
+        },
+        {
+            "tc": 18,
+            "name": "GET \/aduan\/meta",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 19,
+            "name": "GET \/aduan list",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 20,
+            "name": "POST \/aduan create new complaint",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 21,
+            "name": "GET \/inventory\/laptop\/meta",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 22,
+            "name": "GET \/inventory\/laptop list",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 23,
+            "name": "GET \/inventory\/computer\/meta",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 24,
+            "name": "GET \/inventory\/computer list",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 25,
+            "name": "GET \/inventory\/printer\/meta",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 26,
+            "name": "GET \/inventory\/printer list",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 27,
+            "name": "GET \/inventory\/scanner\/meta",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 28,
+            "name": "GET \/inventory\/scanner list",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 29,
+            "name": "GET \/inventory\/cctv\/meta",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 30,
+            "name": "GET \/inventory\/cctv list",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 31,
+            "name": "GET \/inventory\/mobile-tower\/meta",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 32,
+            "name": "GET \/inventory\/mobile-tower list",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 33,
+            "name": "GET \/inventory\/access-point\/meta",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 34,
+            "name": "GET \/inventory\/access-point list",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 35,
+            "name": "GET \/inventory\/switch\/meta",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 36,
+            "name": "GET \/inventory\/switch list",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 37,
+            "name": "GET \/inventory\/wireless\/meta",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 38,
+            "name": "GET \/inventory\/wireless list",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 39,
+            "name": "POST \/inventory\/laptop create",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 40,
+            "name": "POST \/inventory\/computer create",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 41,
+            "name": "POST \/inventory\/printer create",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 42,
+            "name": "GET \/inspections\/laptop list",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 43,
+            "name": "GET \/inspections\/computer list",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 44,
+            "name": "GET \/inspection-schedules",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 45,
+            "name": "GET \/pica-inspeksi\/meta",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 46,
+            "name": "GET \/pica-inspeksi list",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 47,
+            "name": "GET \/operations\/jobs\/meta",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 48,
+            "name": "GET \/operations\/jobs list",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 49,
+            "name": "GET \/operations\/unschedule-jobs\/meta",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 50,
+            "name": "GET \/operations\/unschedule-jobs list",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 51,
+            "name": "GET \/operations\/monitoring-jobs",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 52,
+            "name": "POST \/operations\/jobs create assignment job",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 53,
+            "name": "POST \/operations\/unschedule-jobs create",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 54,
+            "name": "GET \/departments list",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 55,
+            "name": "POST \/departments create",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 56,
+            "name": "GET \/pengajuan-akses list",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 57,
+            "name": "GET \/kpi-vhms list",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 58,
+            "name": "GET \/kpi-vhms\/summary",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 59,
+            "name": "GET \/kpi-vhms\/breakdown",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 60,
+            "name": "GET \/kpi-aduan-analysis\/chart",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 61,
+            "name": "GET \/kpi-aduan-analysis\/details",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 62,
+            "name": "GET \/pengalihan-assets\/meta",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 63,
+            "name": "GET \/pengalihan-assets list",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 64,
+            "name": "GET \/pengalihan-assets\/data",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 65,
+            "name": "GET \/pengalihan-assets\/inventories",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 66,
+            "name": "GET \/pengalihan-assets\/generate-code",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 67,
+            "name": "GET \/scanners\/meta",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 68,
+            "name": "GET \/scanners list",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 69,
+            "name": "POST \/auth\/logout",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        },
+        {
+            "tc": 70,
+            "name": "POST \/auth\/logout (developer)",
+            "status": "FAIL",
+            "reason": "HTTP 401: {\"message\":\"Unauthenticated.\"}"
+        }
+    ],
+    "records_created": [],
+    "records_updated": [],
+    "bugs_found": [],
+    "bugs_fixed": [],
+    "remaining_issues": [],
+    "summary": {
+        "total": 70,
+        "passed": 3,
+        "failed": 67,
+        "pass_rate": "4.3%"
+    }
+}

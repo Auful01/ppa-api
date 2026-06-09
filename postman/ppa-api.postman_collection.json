@@ -1,0 +1,960 @@
+{
+  "info": {
+    "_postman_id": "f7a6d237-72d1-4fd8-8a9b-6f3d1b741111",
+    "name": "PPA API",
+    "description": "Postman collection for the Laravel full API endpoints.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000/api"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "site",
+      "value": "IPT"
+    },
+    {
+      "key": "year",
+      "value": "2026"
+    },
+    {
+      "key": "month",
+      "value": "4"
+    },
+    {
+      "key": "quarter",
+      "value": "2"
+    },
+    {
+      "key": "type",
+      "value": "computer"
+    },
+    {
+      "key": "aduan_id",
+      "value": ""
+    },
+    {
+      "key": "department_id",
+      "value": ""
+    },
+    {
+      "key": "inventory_id",
+      "value": ""
+    },
+    {
+      "key": "inspection_id",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nrp\": \"your-nrp\",\n  \"password\": \"your-password\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Get Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard?site={{site}}&year={{year}}&month={{month}}&quarter={{quarter}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard"
+              ],
+              "query": [
+                {
+                  "key": "site",
+                  "value": "{{site}}"
+                },
+                {
+                  "key": "year",
+                  "value": "{{year}}"
+                },
+                {
+                  "key": "month",
+                  "value": "{{month}}"
+                },
+                {
+                  "key": "quarter",
+                  "value": "{{quarter}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Chart Inspeksi",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/chart-inspeksi?site={{site}}&year={{year}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "chart-inspeksi"
+              ],
+              "query": [
+                {
+                  "key": "site",
+                  "value": "{{site}}"
+                },
+                {
+                  "key": "year",
+                  "value": "{{year}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Aduan",
+      "item": [
+        {
+          "name": "Get Aduan Meta",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/aduan/meta?site={{site}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "aduan",
+                "meta"
+              ],
+              "query": [
+                {
+                  "key": "site",
+                  "value": "{{site}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Aduan",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/aduan?site={{site}}&per_page=25",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "aduan"
+              ],
+              "query": [
+                {
+                  "key": "site",
+                  "value": "{{site}}"
+                },
+                {
+                  "key": "per_page",
+                  "value": "25"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Aduan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"site\": \"{{site}}\",\n  \"nrp\": \"123456\",\n  \"complaint_name\": \"User Testing\",\n  \"complaint_note\": \"Device tidak bisa digunakan\",\n  \"phone_number\": \"08123456789\",\n  \"date_of_complaint\": \"2026-04-13 10:00:00\",\n  \"location\": \"Office\",\n  \"location_detail\": \"Ruang ICT\",\n  \"category_name\": \"PC/NB\",\n  \"crew\": \"Teknisi A\",\n  \"inventory_number\": \"IPT-PC-ICT-001\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/aduan",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "aduan"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Show Aduan",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/aduan/{{aduan_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "aduan",
+                "{{aduan_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Accept Aduan",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/aduan/{{aduan_id}}/accept",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "aduan",
+                "{{aduan_id}}",
+                "accept"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Progress Aduan",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"CLOSED\",\n  \"repair_note\": \"Sudah diperbaiki\",\n  \"action_repair\": \"Install ulang driver\",\n  \"date_of_complaint\": \"2026-04-13 10:00:00\",\n  \"start_response\": \"2026-04-13 10:15:00\",\n  \"start_progress\": \"2026-04-13 10:20:00\",\n  \"end_progress\": \"2026-04-13 11:00:00\",\n  \"location\": \"Office\",\n  \"detail_location\": \"Ruang ICT\",\n  \"crew\": \"Teknisi A\",\n  \"urgency\": \"NORMAL\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/aduan/{{aduan_id}}/progress",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "aduan",
+                "{{aduan_id}}",
+                "progress"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Urgency Aduan",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"urgency\": \"URGENT\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/aduan/{{aduan_id}}/urgency",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "aduan",
+                "{{aduan_id}}",
+                "urgency"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Aduan",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/aduan/{{aduan_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "aduan",
+                "{{aduan_id}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Departments",
+      "item": [
+        {
+          "name": "List Departments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/departments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "departments"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Department",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"department_name\": \"ICT TEST\",\n  \"code\": \"ICT\",\n  \"is_site\": \"Y\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/departments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "departments"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Show Department",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/departments/{{department_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "departments",
+                "{{department_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Department",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"department_name\": \"ICT UPDATED\",\n  \"code\": \"ICT\",\n  \"is_site\": \"Y\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/departments/{{department_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "departments",
+                "{{department_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Department",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/departments/{{department_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "departments",
+                "{{department_id}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Inventory",
+      "item": [
+        {
+          "name": "Inventory Meta",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/inventory/{{type}}/meta?site={{site}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "inventory",
+                "{{type}}",
+                "meta"
+              ],
+              "query": [
+                {
+                  "key": "site",
+                  "value": "{{site}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Inventory",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/inventory/{{type}}?site={{site}}&per_page=25",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "inventory",
+                "{{type}}"
+              ],
+              "query": [
+                {
+                  "key": "site",
+                  "value": "{{site}}"
+                },
+                {
+                  "key": "per_page",
+                  "value": "25"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Inventory Computer Sample",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"site\": \"{{site}}\",\n  \"computer_code\": \"IPT-PC-ICT-999\",\n  \"computer_name\": \"PC TEST\",\n  \"number_asset_ho\": \"AST-999\",\n  \"assets_category\": \"COMPUTER\",\n  \"spesifikasi\": \"Dell, i5, 1TB, 256SSD, 16GB, Intel, Black, Windows 11\",\n  \"serial_number\": \"SN-TEST-999\",\n  \"aplikasi\": \"Office\",\n  \"license\": \"OEM\",\n  \"ip_address\": \"192.168.1.100\",\n  \"date_of_inventory\": \"2026-04-13 09:00:00\",\n  \"date_of_deploy\": \"2026-04-13 09:00:00\",\n  \"location\": \"Office\",\n  \"status\": \"READY_USED\",\n  \"condition\": \"GOOD\",\n  \"note\": \"Created from Postman\",\n  \"dept\": \"ICT\",\n  \"user_alls_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/inventory/computer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "inventory",
+                "computer"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Show Inventory",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/inventory/{{type}}/{{inventory_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "inventory",
+                "{{type}}",
+                "{{inventory_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Inventory Computer Sample",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"computer_name\": \"PC TEST UPDATED\",\n  \"status\": \"READY_STANDBY\",\n  \"condition\": \"GOOD\",\n  \"note\": \"Updated from Postman\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/inventory/computer/{{inventory_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "inventory",
+                "computer",
+                "{{inventory_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Inventory",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/inventory/{{type}}/{{inventory_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "inventory",
+                "{{type}}",
+                "{{inventory_id}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Inspections",
+      "item": [
+        {
+          "name": "List Inspections",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/inspections/{{type}}?site={{site}}&year={{year}}&per_page=25",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "inspections",
+                "{{type}}"
+              ],
+              "query": [
+                {
+                  "key": "site",
+                  "value": "{{site}}"
+                },
+                {
+                  "key": "year",
+                  "value": "{{year}}"
+                },
+                {
+                  "key": "per_page",
+                  "value": "25"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Show Inspection",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/inspections/{{type}}/{{inspection_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "inspections",
+                "{{type}}",
+                "{{inspection_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Inspection Sample",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"inspection_status\": \"Y\",\n  \"inspector\": \"Tester\",\n  \"findings\": \"Temuan sample\",\n  \"findings_action\": \"Action sample\",\n  \"findings_status\": \"OPEN\",\n  \"remarks\": \"Updated from Postman\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/inspections/{{type}}/{{inspection_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "inspections",
+                "{{type}}",
+                "{{inspection_id}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
