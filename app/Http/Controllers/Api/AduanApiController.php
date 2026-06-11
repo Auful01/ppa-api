@@ -65,6 +65,77 @@ class AduanApiController extends Controller
         ]);
     }
 
+    public function exportPdf(Request $request)
+    {
+        $validated = $request->validate([
+            'site'      => 'nullable|string',
+            'startDate' => 'nullable|date',
+            'endDate'   => 'nullable|date',
+            'pic'       => 'nullable|string',
+        ]);
+
+        $site      = SiteContext::resolve($request);
+        $startDate = $validated['startDate'] ?? null;
+        $endDate   = $validated['endDate'] ?? null;
+        $picName   = $validated['pic'] ?? null;
+
+        $query = Aduan::query()->whereNull('deleted_at');
+        if ($site) {
+            SiteContext::apply($query, 'site', $site);
+        }
+        if ($startDate && $endDate) {
+            $query->whereBetween('created_date', [$startDate, $endDate]);
+        }
+        $dataAduan = $query->orderByDesc('date_of_complaint')->get();
+
+        $startDateConv = $startDate ? Carbon::parse($startDate)->translatedFormat('d F Y') : null;
+        $endDateConv   = $endDate   ? Carbon::parse($endDate)->translatedFormat('d F Y')   : null;
+
+        $user = auth()->user();
+        if ($site === 'HO') {
+            $picApproved = 'EDI NUGROHO';
+        } elseif ($user && $user->role === 'ict_group_leader') {
+            $picApproved = $user->name;
+        } else {
+            $picApproved = $user?->name ?? '-';
+        }
+
+        $qr_base64Approved = $this->tryGenerateQr($picApproved);
+        $qr_base64Pic      = $picName ? $this->tryGenerateQr($picName) : null;
+
+        \Barryvdh\DomPDF\Facade\Pdf::setOptions(['isRemoteEnabled' => true]);
+
+        if ($startDate && $endDate) {
+            $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView(
+                'itportal.rekapAllInspeksi.rekapAduan',
+                compact('dataAduan', 'site', 'picName', 'picApproved', 'qr_base64Approved', 'qr_base64Pic', 'startDateConv', 'endDateConv')
+            )->setPaper('A4', 'landscape');
+            return $pdf->download('rekap-aduan-' . $startDate . '-' . $endDate . '.pdf');
+        }
+
+        $year = Carbon::now()->year;
+        $pdf  = \Barryvdh\DomPDF\Facade\Pdf::loadView(
+            'itportal.rekapAllInspeksi.rekapAduan',
+            compact('dataAduan', 'site', 'picName', 'picApproved', 'qr_base64Approved', 'qr_base64Pic', 'year')
+        )->setPaper('A4', 'landscape');
+        return $pdf->download('rekap-aduan-' . $year . '.pdf');
+    }
+
+    private function tryGenerateQr(?string $name): ?string
+    {
+        if (!$name) return null;
+        try {
+            $user = User::where('name', $name)->first();
+            if (!$user) return null;
+            $qrString = "NRP: {$user->nrp}, Nama: {$user->name}, Jabatan: {$user->position}";
+            $barcode  = new \Milon\Barcode\DNS2D();
+            $barcode->setStorPath(storage_path('framework/barcodes/'));
+            return 'data:image/png;base64,' . $barcode->getBarcodePNG($qrString, 'QRCODE');
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
     public function meta(Request $request)
     {
         $site = SiteContext::resolve($request);
@@ -390,7 +461,17 @@ class AduanApiController extends Controller
 
     private function generateTicket(?string $site): string
     {
+        // NOTE: This MUST mirror AduanController::create() (the Inertia source of
+        // truth) byte-for-byte. The web builds the date segment from the 2-digit
+        // year concatenated with the UNPADDED month and day (e.g. 2026-06-11 =>
+        // "26611"), and the sequence from segment [2] of today's last
+        // complaint_code for the same site. Do not "fix" the padding here — the
+        // unified web+mobile database must produce identical codes from both apps.
         $currentDate = now();
+        $year  = $currentDate->format('y'); // 2-digit year, e.g. "26"
+        $month = $currentDate->month;       // unpadded month, e.g. 6
+        $day   = $currentDate->day;         // unpadded day, e.g. 11
+
         $scopeSite = SiteContext::isHo($site) ? 'HO' : $site;
 
         $lastTicket = Aduan::whereDate('created_at', $currentDate->toDateString())
@@ -398,13 +479,14 @@ class AduanApiController extends Controller
             ->orderByDesc('max_id')
             ->first();
 
-        $sequence = 1;
+        $maxId = 0;
         if ($lastTicket?->complaint_code) {
             $parts = explode('-', $lastTicket->complaint_code);
-            $sequence = ((int) end($parts)) + 1;
+            $maxId = (int) ($parts[2] ?? 0);
         }
 
-        return 'ADUAN-' . $currentDate->format('ymd') . '-' . str_pad((string) $sequence, 2, '0', STR_PAD_LEFT);
+        return 'ADUAN-' . $year . $month . $day . '-'
+            . str_pad((string) (($maxId % 10000) + 1), 2, '0', STR_PAD_LEFT);
     }
 
     private function authorizedAduanQuery(Request $request)

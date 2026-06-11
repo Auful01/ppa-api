@@ -41,6 +41,7 @@ class MonitoringJobsExport implements FromCollection, WithHeadings, ShouldAutoSi
             'sarana',
             'crew_ids',
             'crew_names',
+            'approval_status',
             'creator_name',
             'created_at',
             'updated_at',

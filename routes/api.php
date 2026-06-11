@@ -10,6 +10,8 @@ use App\Http\Controllers\Api\DepartmentApiController;
 use App\Http\Controllers\Api\InspectionApiController;
 use App\Http\Controllers\Api\InspectionScheduleApiController;
 use App\Http\Controllers\Api\InventoryApiController;
+use App\Http\Controllers\Api\KpiInspeksiApiController;
+use App\Http\Controllers\Api\KpiResponseTimeApiController;
 use App\Http\Controllers\Api\KpiVhmsApiController;
 use App\Http\Controllers\Api\KpiAduanAnalysisApiController;
 use App\Http\Controllers\Api\OperationsApiController;
@@ -36,6 +38,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/chart-inspeksi', ChartInspeksiApiController::class);
 
     Route::get('/aduan/meta', [AduanApiController::class, 'meta']);
+    Route::get('/aduan/export-pdf', [AduanApiController::class, 'exportPdf']);
     Route::get('/aduan', [AduanApiController::class, 'index']);
     Route::post('/aduan', [AduanApiController::class, 'store']);
     Route::get('/aduan/{id}', [AduanApiController::class, 'show']);
@@ -53,6 +56,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/pengajuan-akses/{id}', [PengajuanAksesApiController::class, 'destroy']);
 
     Route::get('/inventory/{type}/meta', [InventoryApiController::class, 'meta']);
+    Route::get('/inventory/{type}/generate-code', [InventoryApiController::class, 'generateCode']);
     Route::get('/inventory/{type}', [InventoryApiController::class, 'index']);
     Route::post('/inventory/{type}', [InventoryApiController::class, 'store']);
     Route::get('/inventory/{type}/{id}', [InventoryApiController::class, 'show']);
@@ -113,6 +117,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/kpi-aduan-analysis/chart', [KpiAduanAnalysisApiController::class, 'chart']);
     Route::get('/kpi-aduan-analysis/details', [KpiAduanAnalysisApiController::class, 'details']);
+
+    Route::get('/kpi-response-time', [KpiResponseTimeApiController::class, 'index']);
+    Route::get('/kpi-inspeksi', [KpiInspeksiApiController::class, 'index']);
 
     Route::get('/inspections/{type}', [InspectionApiController::class, 'index']);
     Route::get('/inspections/{type}/{id}', [InspectionApiController::class, 'show']);

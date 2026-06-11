@@ -8,6 +8,7 @@ use App\Models\Department;
 use App\Models\UserAll;
 use App\Support\Api\InventoryRegistry;
 use App\Support\Api\SiteContext;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
@@ -173,6 +174,84 @@ class InventoryApiController extends Controller
         ]);
     }
 
+    public function generateCode(Request $request, string $type): \Illuminate\Http\JsonResponse
+    {
+        $config = InventoryRegistry::get($type);
+        $model = $config['model'];
+        $codeColumn = $config['code_column'];
+        $siteColumn = $config['site_column'] ?? 'site';
+        $site = SiteContext::resolve($request) ?? 'HO';
+
+        // SOURCE OF TRUTH: laptop & computer use a DEPARTMENT-SCOPED code on the
+        // web (InvLaptopController/InvComputerController::generateCode):
+        //   {SITE}-NB-{deptCode}-{seq:3}  (laptop)
+        //   {SITE}-PC-{deptCode}-{seq:3}  (computer)
+        // The sequence resets per department, so we must scope by `dept`. The
+        // generic trailing-number increment below is only correct for the
+        // non-dept types (AP/switch/wireless/cctv/scanner/MT).
+        $deptInfix = ['laptop' => 'NB', 'computer' => 'PC'];
+        $normalizedType = strtolower($type);
+        if (isset($deptInfix[$normalizedType]) && $request->filled('dept')) {
+            $deptInput = trim((string) $request->string('dept'));
+            $department = Department::where('department_name', $deptInput)
+                ->orWhere('code', $deptInput)
+                ->first();
+            $deptCode = $department->code ?? $deptInput;
+            $sitePrefix = SiteContext::isHo($site) ? 'HO' : strtoupper((string) $site);
+
+            $latestDept = $model::query()
+                ->when(
+                    SiteContext::isHo($site),
+                    fn ($q) => $q->where(fn ($w) => $w->whereNull($siteColumn)->orWhere($siteColumn, 'HO')),
+                    fn ($q) => $q->where($siteColumn, $sitePrefix)
+                )
+                ->where('dept', $deptCode)
+                ->orderByDesc('max_id')
+                ->first();
+
+            $seq = 0;
+            if ($latestDept && $latestDept->{$codeColumn}) {
+                $parts = explode('-', (string) $latestDept->{$codeColumn});
+                $seq = (int) end($parts);
+            }
+
+            $code = $sitePrefix . '-' . $deptInfix[$normalizedType] . '-' . $deptCode . '-'
+                . str_pad((string) (($seq % 10000) + 1), 3, '0', STR_PAD_LEFT);
+
+            return response()->json(['code' => $code]);
+        }
+
+        $latest = $model::query()
+            ->when(! empty($siteColumn), function ($query) use ($siteColumn, $site) {
+                if (SiteContext::isHo($site)) {
+                    $query->where(function ($q) use ($siteColumn) {
+                        $q->whereNull($siteColumn)->orWhere($siteColumn, 'HO');
+                    });
+                } else {
+                    $query->where($siteColumn, $site);
+                }
+            })
+            ->orderByDesc('max_id')
+            ->first();
+
+        if (! $latest) {
+            return response()->json(['code' => '']);
+        }
+
+        $existingCode = (string) $latest->{$codeColumn};
+
+        if (preg_match('/^(.*?)(\d+)$/', $existingCode, $matches)) {
+            $prefix = $matches[1];
+            $lastNumber = (int) $matches[2];
+            $width = max(strlen($matches[2]), 3);
+            $nextCode = $prefix . str_pad($lastNumber + 1, $width, '0', STR_PAD_LEFT);
+
+            return response()->json(['code' => $nextCode]);
+        }
+
+        return response()->json(['code' => '']);
+    }
+
     private function extractPayload(Request $request, Model $record): array
     {
         $fillable = collect($record->getFillable())
@@ -187,6 +266,16 @@ class InventoryApiController extends Controller
     {
         if (in_array('user_alls_id', $record->getFillable(), true) && array_key_exists('user_alls_id', $payload)) {
             $payload['user_alls_id'] = $this->resolveUserAllId($payload['user_alls_id'], $site);
+        }
+
+        foreach (['date_of_inventory', 'date_of_deploy', 'inventory_date'] as $dateField) {
+            if (! empty($payload[$dateField])) {
+                try {
+                    $payload[$dateField] = Carbon::parse($payload[$dateField])->toDateString();
+                } catch (\Throwable) {
+                    // keep as-is if unparseable
+                }
+            }
         }
 
         return $payload;

@@ -364,11 +364,12 @@ class KpiVhmsApiController extends Controller
 
     private function resolveSite(Request $request): string
     {
-        if (! SiteContext::canAccessAnySite($request)) {
-            return strtoupper((string) ($request->user()?->site ?? 'BIB'));
-        }
-
-        return strtoupper((string) $request->input('site', 'BIB'));
+        // SOURCE OF TRUTH: KpiVhmsController hardcodes `$site = 'BIB'` in both
+        // index() and getDataFilter(). VHMS download monitoring exists only for
+        // BIB, so the mobile endpoint must pin to BIB regardless of the caller's
+        // active site (otherwise a non-BIB active site returns empty data while
+        // the web still shows BIB).
+        return 'BIB';
     }
 
     private function indonesianMonth(int $month): string

@@ -109,7 +109,7 @@ class OperationsApiController extends Controller
 
         foreach ($validated['jobs'] as $job) {
             DailyJob::create([
-                'code'         => $job['code'] ?? null,
+                'code'         => ! empty($job['code']) ? $job['code'] : $this->generateJobCode('JA'),
                 'category_job' => $job['categoryJob'] ?? 'assignment',
                 'description'  => $job['job'],
                 'date'         => $job['date'] ?? now()->toDateString(),
@@ -158,22 +158,24 @@ class OperationsApiController extends Controller
         }
 
         $validated = $request->validate([
-            'description'    => ['required', 'string'],
-            'remark'         => ['required', 'string'],
-            'due_date'       => ['required', 'date'],
-            'status'         => ['required', 'string', 'in:open,continue,closed'],
-            'category_job'   => ['required', 'string', 'in:assignment,support'],
-            'crew'           => ['array'],
-            'sarana'         => ['required', 'string'],
-            'shift'          => ['required', 'string', 'in:SHIFT_1,SHIFT_2,pagi,malam'],
-            'action_taken'   => ['nullable', 'string'],
-            'start_progress' => ['nullable', 'date'],
-            'end_progress'   => ['nullable', 'date'],
-            'category'       => ['nullable', 'string'],
-            'root_cause'     => ['nullable', 'string'],
+            'description'    => ['sometimes', 'string'],
+            'remark'         => ['sometimes', 'nullable', 'string'],
+            'due_date'       => ['sometimes', 'nullable', 'date'],
+            'status'         => ['sometimes', 'string', 'in:open,continue,closed'],
+            'category_job'   => ['sometimes', 'string', 'in:assignment,support'],
+            'crew'           => ['sometimes', 'array'],
+            'sarana'         => ['sometimes', 'nullable', 'string'],
+            'shift'          => ['sometimes', 'string', 'in:SHIFT_1,SHIFT_2,pagi,malam'],
+            'action_taken'   => ['sometimes', 'nullable', 'string'],
+            'start_progress' => ['sometimes', 'nullable', 'date'],
+            'end_progress'   => ['sometimes', 'nullable', 'date'],
+            'category'       => ['sometimes', 'nullable', 'string'],
+            'root_cause'     => ['sometimes', 'nullable', 'string'],
         ]);
 
-        $validated['shift'] = $this->normalizeShift($validated['shift']);
+        if (array_key_exists('shift', $validated)) {
+            $validated['shift'] = $this->normalizeShift($validated['shift']);
+        }
         $validated['updated_by'] = $request->user()->id;
         $job->update($validated);
 
@@ -267,10 +269,12 @@ class OperationsApiController extends Controller
         $scheduledJobs   = $this->monitoringScheduledQuery($request, $site, $shift)->get();
         $unscheduledJobs = $this->monitoringUnscheduledQuery($request, $site, $shift)->get();
 
-        // Export tersedia hanya jika semua job yang tampil sudah di-approve
-        $allApproved = $scheduledJobs->every(fn ($j) => $j->is_approved)
-            && $unscheduledJobs->every(fn ($j) => $j->is_approved)
-            && ($scheduledJobs->count() + $unscheduledJobs->count()) > 0;
+        // Parity dengan web Inertia: approval bersifat read-only (kolom `approval_status`),
+        // bukan gate untuk export. `all_approved` hanya informasional.
+        $isApproved  = fn ($j) => $j->approval_status === 'approved';
+        $allApproved = ($scheduledJobs->count() + $unscheduledJobs->count()) > 0
+            && $scheduledJobs->every($isApproved)
+            && $unscheduledJobs->every($isApproved);
 
         return response()->json([
             'data' => [
@@ -286,7 +290,9 @@ class OperationsApiController extends Controller
                     $request->only(['start_date', 'end_date', 'status']),
                     ['shift' => $shift]
                 ),
-                'can_approve' => in_array($request->user()->role, self::ROLE_APPROVE_JOB, true),
+                // Web Monitoring Jobs tidak punya aksi approve; export selalu tersedia.
+                'can_approve'  => false,
+                'export_ready' => true,
             ],
         ]);
     }
@@ -305,14 +311,8 @@ class OperationsApiController extends Controller
             'status'     => ['nullable', 'string'],
         ]);
 
-        // Pastikan semua job dalam filter sudah di-approve sebelum export
-        $scheduledCount   = $this->monitoringScheduledQuery($request, $site, $shift)->where('is_approved', false)->count();
-        $unscheduledCount = $this->monitoringUnscheduledQuery($request, $site, $shift)->where('is_approved', false)->count();
-
-        if ($scheduledCount + $unscheduledCount > 0) {
-            abort(403, 'Export hanya tersedia setelah semua job di-approve oleh Group Leader.');
-        }
-
+        // Parity dengan web Inertia (DailyJobMonitorController@exportReportMonitoring):
+        // export selalu tersedia tanpa gate approval.
         $format = strtolower((string) ($validated['format'] ?? 'xlsx'));
         $scope  = strtolower((string) ($validated['scope'] ?? 'scheduled'));
 
@@ -437,7 +437,7 @@ class OperationsApiController extends Controller
 
         foreach ($validated['jobs'] as $job) {
             DailyJob::create([
-                'code'          => $job['code'] ?? null,
+                'code'          => ! empty($job['code']) ? $job['code'] : $this->generateJobCode('UJ'),
                 'category_job'  => 'unschedule',
                 'description'   => $job['job'],
                 'issue'         => $job['issue'] ?? null,
@@ -486,20 +486,22 @@ class OperationsApiController extends Controller
             ->firstOrFail();
 
         $validated = $request->validate([
-            'description'    => ['required', 'string'],
-            'issue'          => ['required', 'string'],
-            'action_taken'   => ['required', 'string'],
-            'remark'         => ['required', 'string'],
-            'status'         => ['required', 'string', 'in:open,continue,closed'],
-            'crew'           => ['array'],
-            'shift'          => ['required', 'string', 'in:SHIFT_1,SHIFT_2,pagi,malam'],
-            'start_progress' => ['nullable', 'date'],
-            'end_progress'   => ['nullable', 'date'],
-            'category'       => ['required', 'string'],
-            'root_cause'     => ['nullable', 'string'],
+            'description'    => ['sometimes', 'string'],
+            'issue'          => ['sometimes', 'nullable', 'string'],
+            'action_taken'   => ['sometimes', 'nullable', 'string'],
+            'remark'         => ['sometimes', 'nullable', 'string'],
+            'status'         => ['sometimes', 'string', 'in:open,continue,closed'],
+            'crew'           => ['sometimes', 'array'],
+            'shift'          => ['sometimes', 'string', 'in:SHIFT_1,SHIFT_2,pagi,malam'],
+            'start_progress' => ['sometimes', 'nullable', 'date'],
+            'end_progress'   => ['sometimes', 'nullable', 'date'],
+            'category'       => ['sometimes', 'string'],
+            'root_cause'     => ['sometimes', 'nullable', 'string'],
         ]);
 
-        $validated['shift'] = $this->normalizeShift($validated['shift']);
+        if (array_key_exists('shift', $validated)) {
+            $validated['shift'] = $this->normalizeShift($validated['shift']);
+        }
         $validated['updated_by'] = $request->user()->id;
         $job->update($validated);
 
@@ -538,7 +540,7 @@ class OperationsApiController extends Controller
     {
         $user = $request->user();
 
-        if (! SiteContext::canAccessAnySite($request) && $site !== $user->site) {
+        if (! SiteContext::canAccessAnySite($request) && strtoupper((string) $user->site) !== $site) {
             abort(403, 'You dont have permission to access this page.');
         }
     }
@@ -556,7 +558,7 @@ class OperationsApiController extends Controller
     {
         $user = $request->user();
 
-        if (! SiteContext::canAccessAnySite($request) && $site !== $user->site) {
+        if (! SiteContext::canAccessAnySite($request) && strtoupper((string) $user->site) !== $site) {
             abort(403, 'You dont have permission to access this page.');
         }
     }
@@ -625,8 +627,7 @@ class OperationsApiController extends Controller
                 'sarana'       => $job->sarana,
                 'crew_ids'     => $crewIds->implode(', '),
                 'crew_names'   => $crewNames->implode(', '),
-                'is_approved'  => $job->is_approved ? 'Ya' : 'Tidak',
-                'approved_at'  => optional($job->approved_at)->format('Y-m-d H:i:s'),
+                'approval_status' => $job->approval_status === 'approved' ? 'Approved' : 'Belum',
                 'creator_name' => $job->creator?->name,
                 'created_at'   => optional($job->created_at)->format('Y-m-d H:i:s'),
                 'updated_at'   => optional($job->updated_at)->format('Y-m-d H:i:s'),
@@ -647,12 +648,35 @@ class OperationsApiController extends Controller
             ->values();
     }
 
+    /**
+     * Mirror the Inertia web client-side generator:
+     *   CreateJobAssign.vue            => `JA` + 6 lowercase-alphanumeric chars
+     *   UnscheduleJobs/CreateJobAssign => `UJ` + 6 lowercase-alphanumeric chars
+     * The web builds this in the browser and submits it; mobile omits it, so the
+     * API must generate the identical format (the `code` is the route key for
+     * show/update/delete — a null code would make the row unreachable).
+     */
+    private function generateJobCode(string $prefix): string
+    {
+        $chars  = '0123456789abcdefghijklmnopqrstuvwxyz';
+        $result = '';
+        for ($i = 0; $i < 6; $i++) {
+            $result .= $chars[random_int(0, strlen($chars) - 1)];
+        }
+
+        return $prefix . $result;
+    }
+
     private function normalizeShift(null|string $shift): ?string
     {
         if ($shift === null || $shift === '') {
             return null;
         }
 
+        // AUTHORITATIVE SCHEMA: migration 2025_05_24_091722_add_job_tables.php
+        // declares daily_jobs.shift as enum('pagi','malam'). The DB only accepts
+        // those two values, so every write MUST resolve to 'pagi'/'malam'. The
+        // UI label SHIFT_1/SHIFT_2 maps 1:1 onto pagi/malam (see shiftOptions).
         return match (strtoupper((string) $shift)) {
             'SHIFT_1', 'PAGI' => 'pagi',
             'SHIFT_2', 'MALAM' => 'malam',
