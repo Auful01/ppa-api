@@ -36,6 +36,9 @@ class DailyJob extends Model
         'is_approved',
         'approved_by',
         'approved_at',
+        // Kolom approval daily_jobs di DB live = varchar `approval_status`
+        // (NULL/'approved'); approveJob/approveBatch menulis ke kolom ini.
+        'approval_status',
     ];
 
     protected $casts = [

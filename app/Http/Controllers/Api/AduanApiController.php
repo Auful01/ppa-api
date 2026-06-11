@@ -65,6 +65,28 @@ class AduanApiController extends Controller
         ]);
     }
 
+    /**
+     * Columns actually rendered by the rekapAduan Blade template (plus the
+     * order-by column). Selecting only these avoids loading wide/unused columns
+     * such as complaint_image / repair_image and ~15 others — the previous
+     * SELECT * hydrated the full row for every record.
+     */
+    private const REKAP_PDF_COLUMNS = [
+        'complaint_code',
+        'category_name',
+        'nrp',
+        'complaint_name',
+        'complaint_position',
+        'phone_number',
+        'complaint_note',
+        'location',
+        'detail_location',
+        'action_repair',
+        'repair_note',
+        'status',
+        'date_of_complaint',
+    ];
+
     public function exportPdf(Request $request)
     {
         $validated = $request->validate([
@@ -77,16 +99,42 @@ class AduanApiController extends Controller
         $site      = SiteContext::resolve($request);
         $startDate = $validated['startDate'] ?? null;
         $endDate   = $validated['endDate'] ?? null;
+        // NOTE: `pic` is the signatory name for the QR/signature block, NOT a row
+        // filter. This mirrors the Inertia source of truth
+        // (ExportAduanAllSiteController) byte-for-byte; the recap always lists
+        // every complaint in the period, signed by the GL + selected PIC.
         $picName   = $validated['pic'] ?? null;
 
-        $query = Aduan::query()->whereNull('deleted_at');
+        $memBeforeQuery = memory_get_usage(true);
+
+        // Build the query but DO NOT ->get(). We stream rows with a cursor and
+        // strip Eloquent hydration via toBase(), so the whole dataset is never
+        // materialised in memory at the same time as DomPDF's render tree.
+        $query = Aduan::query()
+            ->select(self::REKAP_PDF_COLUMNS)
+            ->whereNull('deleted_at');
         if ($site) {
             SiteContext::apply($query, 'site', $site);
         }
         if ($startDate && $endDate) {
             $query->whereBetween('created_date', [$startDate, $endDate]);
         }
-        $dataAduan = $query->orderByDesc('date_of_complaint')->get();
+        $query->orderByDesc('date_of_complaint');
+
+        // toBase()->cursor() yields lightweight stdClass rows one at a time. The
+        // Blade @foreach consumes them lazily; each row is freed after its <tr>
+        // is rendered, so peak memory is O(1) in the dataset instead of O(n).
+        $dataAduan = $query->toBase()->cursor();
+        $recordCount = (clone $query)->toBase()->count();
+
+        \Illuminate\Support\Facades\Log::info('[ADUAN EXPORT] query prepared', [
+            'site'            => $site,
+            'records'         => $recordCount,
+            'columns'         => count(self::REKAP_PDF_COLUMNS),
+            'startDate'       => $startDate,
+            'endDate'         => $endDate,
+            'mem_before_query_mb' => round($memBeforeQuery / 1048576, 2),
+        ]);
 
         $startDateConv = $startDate ? Carbon::parse($startDate)->translatedFormat('d F Y') : null;
         $endDateConv   = $endDate   ? Carbon::parse($endDate)->translatedFormat('d F Y')   : null;
@@ -106,19 +154,31 @@ class AduanApiController extends Controller
         \Barryvdh\DomPDF\Facade\Pdf::setOptions(['isRemoteEnabled' => true]);
 
         if ($startDate && $endDate) {
-            $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView(
-                'itportal.rekapAllInspeksi.rekapAduan',
-                compact('dataAduan', 'site', 'picName', 'picApproved', 'qr_base64Approved', 'qr_base64Pic', 'startDateConv', 'endDateConv')
-            )->setPaper('A4', 'landscape');
-            return $pdf->download('rekap-aduan-' . $startDate . '-' . $endDate . '.pdf');
+            $viewData = compact('dataAduan', 'site', 'picName', 'picApproved', 'qr_base64Approved', 'qr_base64Pic', 'startDateConv', 'endDateConv');
+            $filename = 'rekap-aduan-' . $startDate . '-' . $endDate . '.pdf';
+        } else {
+            $year = Carbon::now()->year;
+            $viewData = compact('dataAduan', 'site', 'picName', 'picApproved', 'qr_base64Approved', 'qr_base64Pic', 'year');
+            $filename = 'rekap-aduan-' . $year . '.pdf';
         }
 
-        $year = Carbon::now()->year;
-        $pdf  = \Barryvdh\DomPDF\Facade\Pdf::loadView(
-            'itportal.rekapAllInspeksi.rekapAduan',
-            compact('dataAduan', 'site', 'picName', 'picApproved', 'qr_base64Approved', 'qr_base64Pic', 'year')
-        )->setPaper('A4', 'landscape');
-        return $pdf->download('rekap-aduan-' . $year . '.pdf');
+        $memBeforeRender = memory_get_usage(true);
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('itportal.rekapAllInspeksi.rekapAduan', $viewData)
+            ->setPaper('A4', 'landscape');
+        $content = $pdf->output();
+        $memPeak = memory_get_peak_usage(true);
+
+        \Illuminate\Support\Facades\Log::info('[ADUAN EXPORT] pdf rendered', [
+            'records'              => $recordCount,
+            'pdf_bytes'            => strlen($content),
+            'mem_before_render_mb' => round($memBeforeRender / 1048576, 2),
+            'mem_peak_mb'          => round($memPeak / 1048576, 2),
+        ]);
+
+        return response($content, 200, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
     }
 
     private function tryGenerateQr(?string $name): ?string

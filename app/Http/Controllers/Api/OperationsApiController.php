@@ -153,7 +153,7 @@ class OperationsApiController extends Controller
             ->whereIn('category_job', ['assignment', 'support'])
             ->firstOrFail();
 
-        if ($job->is_approved) {
+        if ($this->jobIsApproved($job)) {
             abort(403, 'Job sudah di-approve dan tidak bisa diedit.');
         }
 
@@ -193,7 +193,7 @@ class OperationsApiController extends Controller
             ->whereIn('category_job', ['assignment', 'support'])
             ->firstOrFail();
 
-        if ($job->is_approved) {
+        if ($this->jobIsApproved($job)) {
             abort(403, 'Job sudah di-approve dan tidak bisa dihapus.');
         }
 
@@ -204,7 +204,33 @@ class OperationsApiController extends Controller
 
     // -------------------------------------------------------------------------
     // Approval
+    //
+    // Kolom approval daily_jobs = varchar `approval_status`
+    //   NULL / ''        => belum di-approve
+    //   'approved'       => sudah di-approve
+    // Ini SATU-SATUNYA kolom approval yang dipakai aplikasi (dikonfirmasi dari
+    // DB live new_itportalv4). Skema live TIDAK punya is_approved/approved_by/
+    // approved_at, jadi kolom-kolom itu tidak boleh ditulis. Web Inertia
+    // (DailyJobMonitorController) tidak punya aksi approve untuk daily jobs —
+    // approve hanya tersedia di mobile API ini, dibatasi role Group Leader
+    // (ROLE_APPROVE_JOB). Export tersedia setelah semua job pada filter aktif
+    // memiliki approval_status = approved.
     // -------------------------------------------------------------------------
+
+    private const APPROVAL_VALUE = 'approved';
+
+    private function jobIsApproved(DailyJob $job): bool
+    {
+        return $job->approval_status === self::APPROVAL_VALUE;
+    }
+
+    private function scopeNotApproved($query): void
+    {
+        $query->where(function ($q) {
+            $q->whereNull('approval_status')
+                ->orWhere('approval_status', '!=', self::APPROVAL_VALUE);
+        });
+    }
 
     public function approveJob(Request $request, string $code)
     {
@@ -214,15 +240,11 @@ class OperationsApiController extends Controller
 
         $job = DailyJob::where('site', $site)->where('code', $code)->firstOrFail();
 
-        if ($job->is_approved) {
+        if ($this->jobIsApproved($job)) {
             return response()->json(['message' => 'Job sudah di-approve sebelumnya.']);
         }
 
-        $job->update([
-            'is_approved' => true,
-            'approved_by' => $request->user()->id,
-            'approved_at' => now(),
-        ]);
+        $job->update(['approval_status' => self::APPROVAL_VALUE]);
 
         return response()->json(['message' => 'Job berhasil di-approve.', 'data' => $job->fresh()]);
     }
@@ -234,25 +256,18 @@ class OperationsApiController extends Controller
         $this->authorizeSiteAccess($request, $site);
 
         $shift = $this->normalizeShift($request->input('shift'));
-        $today = Carbon::today();
+        $jobIds = $this->monitoringScheduledQuery($request, $site, $shift)
+            ->pluck('id')
+            ->merge(
+                $this->monitoringUnscheduledQuery($request, $site, $shift)
+                    ->pluck('id')
+            )
+            ->unique()
+            ->values();
 
-        $query = DailyJob::where('site', $site)
-            ->where('is_approved', false)
-            ->when($request->filled(['start_date', 'end_date']), function ($builder) use ($request) {
-                $builder->whereBetween('date', [$request->string('start_date'), $request->string('end_date')]);
-            }, function ($builder) use ($today) {
-                $builder->whereDate('date', $today);
-            })
-            ->when($shift !== null, fn ($builder) => $builder->where('shift', $shift))
-            ->when($request->filled('status'), fn ($builder) => $builder->where('status', $request->string('status')));
-
-        $count = $query->count();
-
-        $query->update([
-            'is_approved' => true,
-            'approved_by' => $request->user()->id,
-            'approved_at' => now(),
-        ]);
+        $query = DailyJob::whereIn('id', $jobIds);
+        $this->scopeNotApproved($query);
+        $count = $query->update(['approval_status' => self::APPROVAL_VALUE]);
 
         return response()->json(['message' => "$count job berhasil di-approve."]);
     }
@@ -269,9 +284,8 @@ class OperationsApiController extends Controller
         $scheduledJobs   = $this->monitoringScheduledQuery($request, $site, $shift)->get();
         $unscheduledJobs = $this->monitoringUnscheduledQuery($request, $site, $shift)->get();
 
-        // Parity dengan web Inertia: approval bersifat read-only (kolom `approval_status`),
-        // bukan gate untuk export. `all_approved` hanya informasional.
-        $isApproved  = fn ($j) => $j->approval_status === 'approved';
+        // Approval dibaca dari kolom approval_status (lihat jobIsApproved()).
+        $isApproved  = fn ($j) => $this->jobIsApproved($j);
         $allApproved = ($scheduledJobs->count() + $unscheduledJobs->count()) > 0
             && $scheduledJobs->every($isApproved)
             && $unscheduledJobs->every($isApproved);
@@ -290,9 +304,9 @@ class OperationsApiController extends Controller
                     $request->only(['start_date', 'end_date', 'status']),
                     ['shift' => $shift]
                 ),
-                // Web Monitoring Jobs tidak punya aksi approve; export selalu tersedia.
-                'can_approve'  => false,
-                'export_ready' => true,
+                // Approve Job (batch) hanya untuk Group Leader; lihat approveBatch().
+                'can_approve'  => in_array($request->user()->role, self::ROLE_APPROVE_JOB, true),
+                'export_ready' => $allApproved,
             ],
         ]);
     }
@@ -311,8 +325,19 @@ class OperationsApiController extends Controller
             'status'     => ['nullable', 'string'],
         ]);
 
-        // Parity dengan web Inertia (DailyJobMonitorController@exportReportMonitoring):
-        // export selalu tersedia tanpa gate approval.
+        $scheduledQuery = $this->monitoringScheduledQuery($request, $site, $shift);
+        $unscheduledQuery = $this->monitoringUnscheduledQuery($request, $site, $shift);
+        $hasJobs = (clone $scheduledQuery)->exists() || (clone $unscheduledQuery)->exists();
+
+        $scheduledUnapproved = clone $scheduledQuery;
+        $this->scopeNotApproved($scheduledUnapproved);
+        $unscheduledUnapproved = clone $unscheduledQuery;
+        $this->scopeNotApproved($unscheduledUnapproved);
+
+        if (! $hasJobs || $scheduledUnapproved->exists() || $unscheduledUnapproved->exists()) {
+            abort(403, 'Approve semua job yang tampil sebelum export.');
+        }
+
         $format = strtolower((string) ($validated['format'] ?? 'xlsx'));
         $scope  = strtolower((string) ($validated['scope'] ?? 'scheduled'));
 
@@ -569,7 +594,10 @@ class OperationsApiController extends Controller
 
         return DailyJob::with('creator')
             ->when($request->filled(['start_date', 'end_date']), function ($builder) use ($request) {
-                $builder->whereBetween('updated_at', [$request->string('start_date'), $request->string('end_date')]);
+                $builder->whereBetween('updated_at', [
+                    Carbon::parse($request->string('start_date'))->startOfDay(),
+                    Carbon::parse($request->string('end_date'))->endOfDay(),
+                ]);
             }, function ($builder) use ($today) {
                 $builder->whereDate('updated_at', $today)
                     ->where('status', '!=', 'zxc');
@@ -588,7 +616,10 @@ class OperationsApiController extends Controller
         return DailyJob::with('creator')
             ->where('category_job', 'unschedule')
             ->when($request->filled(['start_date', 'end_date']), function ($builder) use ($request) {
-                $builder->whereBetween('updated_at', [$request->string('start_date'), $request->string('end_date')]);
+                $builder->whereBetween('updated_at', [
+                    Carbon::parse($request->string('start_date'))->startOfDay(),
+                    Carbon::parse($request->string('end_date'))->endOfDay(),
+                ]);
             }, function ($builder) use ($today) {
                 $builder->whereDate('updated_at', $today);
             })
@@ -627,7 +658,7 @@ class OperationsApiController extends Controller
                 'sarana'       => $job->sarana,
                 'crew_ids'     => $crewIds->implode(', '),
                 'crew_names'   => $crewNames->implode(', '),
-                'approval_status' => $job->approval_status === 'approved' ? 'Approved' : 'Belum',
+                'approval_status' => $this->jobIsApproved($job) ? 'Approved' : 'Belum',
                 'creator_name' => $job->creator?->name,
                 'created_at'   => optional($job->created_at)->format('Y-m-d H:i:s'),
                 'updated_at'   => optional($job->updated_at)->format('Y-m-d H:i:s'),
