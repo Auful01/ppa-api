@@ -106,14 +106,13 @@ class KpiInspeksiApiController extends Controller
         };
 
         if ($deviceType === 'laptop') {
-            // Web laptop chart is per-year with floor 2025. We show the multi-year
-            // trend ending at the requested year (web's primary chart view), using
-            // the same floor so labels match.
-            $years = range(max(2025, $year - 4), $year);
-            foreach ($years as $th) {
-                [$a, $y, $n] = $counts(['year' => $th]);
-                $push((string) $th, $a, $y, $n);
-            }
+            // Web parity (KpiInspeksiController::countKpi): when a year is supplied
+            // it sets $tahunList = [(int)$request->year] — a SINGLE year. The year
+            // is only a filter, NOT a per-bar chart dimension. So we emit exactly
+            // ONE group for the selected year => two bars rendered client-side
+            // (Sudah % green / Belum % red). No multi-year (2025/2026) categories.
+            [$a, $y, $n] = $counts(['year' => $year]);
+            $push((string) $year, $a, $y, $n);
         } elseif ($deviceType === 'computer') {
             if ($quarter && $year) {
                 [$a, $y, $n] = $counts(['year' => $year, 'triwulan' => $quarter]);

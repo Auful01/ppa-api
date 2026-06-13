@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AduanApiController;
+use App\Http\Controllers\Api\AduanHoApiController;
 use App\Http\Controllers\Api\PengajuanAksesApiController;
 use App\Http\Controllers\Api\AuthApiController;
 use App\Http\Controllers\Api\ChartInspeksiApiController;
@@ -47,6 +48,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/aduan/{id}/progress', [AduanApiController::class, 'updateProgress']);
     Route::patch('/aduan/{id}/urgency', [AduanApiController::class, 'updateUrgency']);
     Route::delete('/aduan/{id}', [AduanApiController::class, 'destroy']);
+
+    // Pengaduan HO — separate from normal Aduan (parity with web AduanHoController).
+    // Static segments (/meta) registered before /{id} so they are not captured.
+    Route::get('/aduan-ho/meta', [AduanHoApiController::class, 'meta']);
+    Route::get('/aduan-ho', [AduanHoApiController::class, 'index']);
+    Route::post('/aduan-ho', [AduanHoApiController::class, 'store']);
+    Route::get('/aduan-ho/{id}', [AduanHoApiController::class, 'show']);
+    Route::delete('/aduan-ho/{id}', [AduanHoApiController::class, 'destroy']);
 
     Route::apiResource('departments', DepartmentApiController::class)->except(['create', 'edit']);
 
