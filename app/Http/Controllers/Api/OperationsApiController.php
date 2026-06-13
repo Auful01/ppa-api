@@ -632,20 +632,55 @@ class OperationsApiController extends Controller
         $endDate = $request->input('end_date');
         $status = $request->input('status');
 
+        // VERBATIM parity with DailyJobMonitorControllerFinal@index $unscheduledJobs:
+        // unschedule rows are filtered by the START_PROGRESS instant inside the
+        // shift's operational window — NOT by the `date` column and NOT by a plain
+        // where('shift', ...). The shift is baked into the start_progress window:
+        //   SHIFT_1 => 06:00:00 .. 17:59:59 (same day)
+        //   SHIFT_2 => 18:00:00 .. 05:59:59 (next day)
+        // With an explicit start_date+end_date the bounds span that range; with no
+        // range we fall back to the operational date/shift. ordered by start_progress.
         return DailyJob::with('creator')
             ->where('category_job', 'unschedule')
-            ->when($startDate && $endDate, function ($query) use ($startDate, $endDate) {
-                $query->whereBetween('date', [$startDate, $endDate]);
-            }, function ($query) use ($operationalDate, $operationalShift, $shift) {
-                $query->whereDate('date', $operationalDate);
-                if (! $shift) {
-                    $query->where('shift', $operationalShift);
+            ->when(
+                $startDate && $endDate,
+                function ($query) use ($startDate, $endDate, $shift) {
+                    if ($shift === 'SHIFT_1') {
+                        $query->whereBetween('start_progress', [
+                            $startDate . ' 06:00:00',
+                            $endDate . ' 17:59:59',
+                        ]);
+                    } elseif ($shift === 'SHIFT_2') {
+                        $endDateNext = Carbon::parse($endDate)->addDay()->toDateString();
+                        $query->whereBetween('start_progress', [
+                            $startDate . ' 18:00:00',
+                            $endDateNext . ' 05:59:59',
+                        ]);
+                    } else {
+                        $query->whereBetween('start_progress', [
+                            $startDate . ' 00:00:00',
+                            $endDate . ' 23:59:59',
+                        ]);
+                    }
+                },
+                function ($query) use ($operationalDate, $operationalShift) {
+                    if ($operationalShift === 'SHIFT_1') {
+                        $query->whereBetween('start_progress', [
+                            $operationalDate . ' 06:00:00',
+                            $operationalDate . ' 17:59:59',
+                        ]);
+                    } else {
+                        $nextDate = Carbon::parse($operationalDate)->addDay()->toDateString();
+                        $query->whereBetween('start_progress', [
+                            $operationalDate . ' 18:00:00',
+                            $nextDate . ' 05:59:59',
+                        ]);
+                    }
                 }
-            })
-            ->when($shift, fn ($query) => $query->where('shift', $shift))
+            )
             ->when($status, fn ($query) => $query->where('status', $status))
             ->where('site', $site)
-            ->orderBy('date', 'desc');
+            ->orderBy('start_progress', 'desc');
     }
 
     /**
