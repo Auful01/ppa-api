@@ -297,6 +297,7 @@ class AduanApiController extends Controller
         $aduan = $this->authorizedAduanQuery($request)->findOrFail($id);
 
         $validated = $request->validate([
+            'nrp'               => ['nullable', 'string'],
             'complaint_name'    => ['nullable', 'string'],
             'complaint_note'    => ['nullable', 'string'],
             'phone_number'      => ['nullable', 'string'],

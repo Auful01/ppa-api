@@ -19,7 +19,10 @@ class OperationsApiController extends Controller
     private const ROLE_CREATE_JOB  = ['ict_developer', 'ict_group_leader'];
     private const ROLE_UPDATE_JOB  = ['ict_developer', 'ict_group_leader', 'ict_admin', 'ict_technician'];
     private const ROLE_DELETE_JOB  = ['ict_developer', 'ict_group_leader'];
-    private const ROLE_APPROVE_JOB = ['ict_group_leader'];
+    // Parity with the production Inertia page: DailyJobMonitorController@index
+    // sets canApprove = in_array(role, ['ict_developer','ict_group_leader']) and
+    // approveAll() authorizes the same two roles. Mirror it exactly here.
+    private const ROLE_APPROVE_JOB = ['ict_group_leader', 'ict_developer'];
     private const ROLE_ALL_WRITE   = ['ict_developer', 'ict_group_leader', 'ict_section_head', 'ict_admin', 'ict_technician'];
 
     // -------------------------------------------------------------------------
@@ -93,7 +96,7 @@ class OperationsApiController extends Controller
         $this->authorizeSiteAccess($request, $site);
 
         $validated = $request->validate([
-            'shared.shift'    => ['nullable', 'string', 'in:SHIFT_1,SHIFT_2,pagi,malam'],
+            'shared.shift'    => ['nullable', 'string', 'in:SHIFT_1,SHIFT_2'],
             'shared.crew'     => ['nullable', 'array'],
             'shared.crew.*'   => ['nullable'],
             'shared.sarana'   => ['nullable', 'string'],
@@ -165,7 +168,7 @@ class OperationsApiController extends Controller
             'category_job'   => ['sometimes', 'string', 'in:assignment,support'],
             'crew'           => ['sometimes', 'array'],
             'sarana'         => ['sometimes', 'nullable', 'string'],
-            'shift'          => ['sometimes', 'string', 'in:SHIFT_1,SHIFT_2,pagi,malam'],
+            'shift'          => ['sometimes', 'string', 'in:SHIFT_1,SHIFT_2'],
             'action_taken'   => ['sometimes', 'nullable', 'string'],
             'start_progress' => ['sometimes', 'nullable', 'date'],
             'end_progress'   => ['sometimes', 'nullable', 'date'],
@@ -224,14 +227,6 @@ class OperationsApiController extends Controller
         return $job->approval_status === self::APPROVAL_VALUE;
     }
 
-    private function scopeNotApproved($query): void
-    {
-        $query->where(function ($q) {
-            $q->whereNull('approval_status')
-                ->orWhere('approval_status', '!=', self::APPROVAL_VALUE);
-        });
-    }
-
     public function approveJob(Request $request, string $code)
     {
         $site = $this->resolveSite($request);
@@ -255,21 +250,21 @@ class OperationsApiController extends Controller
         $this->authorizeRole($request, self::ROLE_APPROVE_JOB);
         $this->authorizeSiteAccess($request, $site);
 
-        $shift = $this->normalizeShift($request->input('shift'));
-        $jobIds = $this->monitoringScheduledQuery($request, $site, $shift)
-            ->pluck('id')
-            ->merge(
-                $this->monitoringUnscheduledQuery($request, $site, $shift)
-                    ->pluck('id')
-            )
-            ->unique()
-            ->values();
+        // VERBATIM web parity with DailyJobMonitorController@approveAll: approve
+        // every job for this site dated today that is still unapproved (NULL
+        // approval_status), regardless of shift/status/category. This is what
+        // flips allApprovedToday() to true so the button switches to "Export
+        // All Report" exactly as the Inertia page does.
+        $count = DailyJob::whereDate('date', Carbon::today())
+            ->where('site', $site)
+            ->whereNull('approval_status')
+            ->update([
+                'approval_status' => self::APPROVAL_VALUE,
+                'updated_by'      => $request->user()->id,
+                'updated_at'      => now(),
+            ]);
 
-        $query = DailyJob::whereIn('id', $jobIds);
-        $this->scopeNotApproved($query);
-        $count = $query->update(['approval_status' => self::APPROVAL_VALUE]);
-
-        return response()->json(['message' => "$count job berhasil di-approve."]);
+        return response()->json(['message' => "Berhasil approve {$count} job hari ini"]);
     }
 
     // -------------------------------------------------------------------------
@@ -284,11 +279,22 @@ class OperationsApiController extends Controller
         $scheduledJobs   = $this->monitoringScheduledQuery($request, $site, $shift)->get();
         $unscheduledJobs = $this->monitoringUnscheduledQuery($request, $site, $shift)->get();
 
-        // Approval dibaca dari kolom approval_status (lihat jobIsApproved()).
-        $isApproved  = fn ($j) => $this->jobIsApproved($j);
-        $allApproved = ($scheduledJobs->count() + $unscheduledJobs->count()) > 0
-            && $scheduledJobs->every($isApproved)
-            && $unscheduledJobs->every($isApproved);
+        // Approval gate — VERBATIM web parity (allApprovedToday): true when no job
+        // for the active date+shift+site is still missing approval_status. This is
+        // the exact predicate MonitoringJobsDashboard.vue uses for the buttons.
+        $allApproved = $this->allApprovedToday($request, $site, $shift);
+        $hasJobs     = ($scheduledJobs->count() + $unscheduledJobs->count()) > 0;
+
+        // Approve Job (batch) hanya untuk role approver; lihat approveBatch().
+        $canApprove = in_array($request->user()->role, self::ROLE_APPROVE_JOB, true);
+
+        // Single primary action, identik dengan web MonitoringJobsDashboard.vue:
+        //   Export All Report : v-if="allApprovedToday"
+        //   Approve Job       : v-if="canApprove && !allApprovedToday"
+        //   (selain itu)      : tidak ada tombol.
+        $primaryAction = $allApproved
+            ? 'export'
+            : ($canApprove ? 'approve' : 'none');
 
         return response()->json([
             'data' => [
@@ -298,15 +304,19 @@ class OperationsApiController extends Controller
             'meta' => [
                 'site'          => $site,
                 'all_approved'  => $allApproved,
+                // Alias eksplisit sesuai kontrak metadata Monitoring Jobs.
+                'is_approved'   => $allApproved,
+                'has_jobs'      => $hasJobs,
                 'users'         => User::query()->select('id', 'name')->orderBy('name')->get(),
                 'shift_options' => $this->shiftOptions(),
                 'filters'       => array_merge(
                     $request->only(['start_date', 'end_date', 'status']),
                     ['shift' => $shift]
                 ),
-                // Approve Job (batch) hanya untuk Group Leader; lihat approveBatch().
-                'can_approve'  => in_array($request->user()->role, self::ROLE_APPROVE_JOB, true),
-                'export_ready' => $allApproved,
+                'can_approve'      => $canApprove,
+                'export_ready'     => $allApproved,
+                'export_available' => $allApproved,
+                'primary_action'   => $primaryAction,
             ],
         ]);
     }
@@ -325,16 +335,11 @@ class OperationsApiController extends Controller
             'status'     => ['nullable', 'string'],
         ]);
 
-        $scheduledQuery = $this->monitoringScheduledQuery($request, $site, $shift);
-        $unscheduledQuery = $this->monitoringUnscheduledQuery($request, $site, $shift);
-        $hasJobs = (clone $scheduledQuery)->exists() || (clone $unscheduledQuery)->exists();
-
-        $scheduledUnapproved = clone $scheduledQuery;
-        $this->scopeNotApproved($scheduledUnapproved);
-        $unscheduledUnapproved = clone $unscheduledQuery;
-        $this->scopeNotApproved($unscheduledUnapproved);
-
-        if (! $hasJobs || $scheduledUnapproved->exists() || $unscheduledUnapproved->exists()) {
+        // Export gate uses the SAME predicate as the button (allApprovedToday),
+        // so whenever the mobile UI shows "Export All Report" the download
+        // succeeds — matching the web, where the export link is rendered exactly
+        // when allApprovedToday is true.
+        if (! $this->allApprovedToday($request, $site, $shift)) {
             abort(403, 'Approve semua job yang tampil sebelum export.');
         }
 
@@ -443,7 +448,7 @@ class OperationsApiController extends Controller
         $this->authorizeSiteAccess($request, $site);
 
         $validated = $request->validate([
-            'shared.shift'            => ['nullable', 'string', 'in:SHIFT_1,SHIFT_2,pagi,malam'],
+            'shared.shift'            => ['nullable', 'string', 'in:SHIFT_1,SHIFT_2'],
             'shared.crew'             => ['nullable', 'array'],
             'shared.crew.*'           => ['nullable'],
             'jobs'                    => ['required', 'array', 'min:1'],
@@ -517,7 +522,7 @@ class OperationsApiController extends Controller
             'remark'         => ['sometimes', 'nullable', 'string'],
             'status'         => ['sometimes', 'string', 'in:open,continue,closed'],
             'crew'           => ['sometimes', 'array'],
-            'shift'          => ['sometimes', 'string', 'in:SHIFT_1,SHIFT_2,pagi,malam'],
+            'shift'          => ['sometimes', 'string', 'in:SHIFT_1,SHIFT_2'],
             'start_progress' => ['sometimes', 'nullable', 'date'],
             'end_progress'   => ['sometimes', 'nullable', 'date'],
             'category'       => ['sometimes', 'string'],
@@ -588,45 +593,123 @@ class OperationsApiController extends Controller
         }
     }
 
+    // -------------------------------------------------------------------------
+    // Monitoring query builders — VERBATIM parity with the web source of truth
+    // DailyJobMonitorController@index ($scheduledJobs / $unscheduledJobs). Proven
+    // row-for-row equal via the evidence harness in
+    // docs/MONITORING_JOBS_EVIDENCE_BASED_FIX.md. Do NOT reintroduce the old
+    // updated_at-based logic — it produced a different record set than the web.
+    // -------------------------------------------------------------------------
+
     private function monitoringScheduledQuery(Request $request, string $site, ?string $shift)
     {
         $today = Carbon::today();
+        $startDate = $request->input('start_date');
+        $endDate = $request->input('end_date');
+        $status = $request->input('status');
 
         return DailyJob::with('creator')
-            ->when($request->filled(['start_date', 'end_date']), function ($builder) use ($request) {
-                $builder->whereBetween('updated_at', [
-                    Carbon::parse($request->string('start_date'))->startOfDay(),
-                    Carbon::parse($request->string('end_date'))->endOfDay(),
-                ]);
-            }, function ($builder) use ($today) {
-                $builder->whereDate('updated_at', $today)
-                    ->where('status', '!=', 'zxc');
+            ->when($startDate && $endDate, function ($query) use ($startDate, $endDate) {
+                $query->whereBetween('date', [$startDate, $endDate]);
+            }, function ($query) use ($today) {
+                $query->where('status', '!=', 'closed')
+                    ->where(function ($q) use ($today) {
+                        $q->whereNull('due_date')
+                            ->orWhereDate('due_date', '>=', $today);
+                    });
             })
-            ->when($shift !== null, fn ($builder) => $builder->where('shift', $shift))
-            ->when($request->filled('status'), fn ($builder) => $builder->where('status', $request->string('status')))
-            ->whereIn('category_job', ['assignment', 'support'])
+            ->when($shift, fn ($query) => $query->where('shift', $shift))
+            ->when($status, fn ($query) => $query->where('status', $status))
+            ->where('category_job', '!=', 'unschedule')
             ->where('site', $site)
-            ->orderByDesc('updated_at');
+            ->orderBy('date', 'desc');
     }
 
     private function monitoringUnscheduledQuery(Request $request, string $site, ?string $shift)
     {
-        $today = Carbon::today();
+        [$operationalDate, $operationalShift] = $this->operationalWindow($request, $shift);
+        $startDate = $request->input('start_date');
+        $endDate = $request->input('end_date');
+        $status = $request->input('status');
 
         return DailyJob::with('creator')
             ->where('category_job', 'unschedule')
-            ->when($request->filled(['start_date', 'end_date']), function ($builder) use ($request) {
-                $builder->whereBetween('updated_at', [
-                    Carbon::parse($request->string('start_date'))->startOfDay(),
-                    Carbon::parse($request->string('end_date'))->endOfDay(),
-                ]);
-            }, function ($builder) use ($today) {
-                $builder->whereDate('updated_at', $today);
+            ->when($startDate && $endDate, function ($query) use ($startDate, $endDate) {
+                $query->whereBetween('date', [$startDate, $endDate]);
+            }, function ($query) use ($operationalDate, $operationalShift, $shift) {
+                $query->whereDate('date', $operationalDate);
+                if (! $shift) {
+                    $query->where('shift', $operationalShift);
+                }
             })
-            ->when($shift !== null, fn ($builder) => $builder->where('shift', $shift))
-            ->when($request->filled('status'), fn ($builder) => $builder->where('status', $request->string('status')))
+            ->when($shift, fn ($query) => $query->where('shift', $shift))
+            ->when($status, fn ($query) => $query->where('status', $status))
             ->where('site', $site)
-            ->orderByDesc('updated_at');
+            ->orderBy('date', 'desc');
+    }
+
+    /**
+     * Operational date/shift window — verbatim parity with the web index()
+     * computation. With an explicit start_date + shift it honours them; otherwise
+     * it derives the current operational shift from the clock (06:00–17:59 =>
+     * SHIFT_1, else SHIFT_2 with the date rolled back before 06:00).
+     *
+     * @return array{0:string,1:string} [operationalDate, operationalShift]
+     */
+    private function operationalWindow(Request $request, ?string $shift): array
+    {
+        $startDate = $request->input('start_date');
+
+        if ($startDate && $shift) {
+            return [$startDate, $shift];
+        }
+
+        $now = now();
+
+        if ($now->hour >= 6 && $now->hour < 18) {
+            return [$now->toDateString(), 'SHIFT_1'];
+        }
+
+        $operationalDate = $now->hour < 6
+            ? $now->copy()->subDay()->toDateString()
+            : $now->toDateString();
+
+        return [$operationalDate, 'SHIFT_2'];
+    }
+
+    /**
+     * Web parity for the Export-vs-Approve button gate
+     * (DailyJobMonitorController@index $allApprovedToday). True when there is no
+     * job for the active date+shift+site still missing an approval_status. This
+     * is the SAME predicate the Inertia page uses to flip "Approve Job" into
+     * "Export All Report", so the mobile button state matches the web exactly.
+     */
+    private function allApprovedToday(Request $request, string $site, ?string $shift): bool
+    {
+        $startDate = $request->input('start_date');
+
+        if ($startDate && $shift) {
+            $approvalDate = $startDate;
+            $approvalShift = $shift;
+        } else {
+            $now = now();
+
+            if ($now->format('H:i:s') >= '06:00:00' && $now->format('H:i:s') <= '17:59:59') {
+                $approvalDate = $now->toDateString();
+                $approvalShift = 'SHIFT_1';
+            } else {
+                $approvalShift = 'SHIFT_2';
+                $approvalDate = $now->hour < 6
+                    ? $now->copy()->subDay()->toDateString()
+                    : $now->toDateString();
+            }
+        }
+
+        return DailyJob::whereDate('date', $approvalDate)
+            ->where('shift', $approvalShift)
+            ->where('site', $site)
+            ->whereNull('approval_status')
+            ->doesntExist();
     }
 
     private function mapJobsForExport($jobs, string $jobType)
@@ -704,22 +787,24 @@ class OperationsApiController extends Controller
             return null;
         }
 
-        // AUTHORITATIVE SCHEMA: migration 2025_05_24_091722_add_job_tables.php
-        // declares daily_jobs.shift as enum('pagi','malam'). The DB only accepts
-        // those two values, so every write MUST resolve to 'pagi'/'malam'. The
-        // UI label SHIFT_1/SHIFT_2 maps 1:1 onto pagi/malam (see shiftOptions).
+        // AUTHORITATIVE: production daily_jobs.shift stores 'SHIFT_1'/'SHIFT_2'
+        // (web write-path DailyJobController::store:157 & UnscheduleJobController::
+        // store:169 default 'SHIFT_1'; validation in:SHIFT_1,SHIFT_2). The filters
+        // run where('shift', $request->shift) with NO mapping, so the value sent
+        // MUST be the stored token. Any stray legacy 'pagi'/'malam' row is folded
+        // onto the canonical token; this NEVER emits pagi/malam.
         return match (strtoupper((string) $shift)) {
-            'SHIFT_1', 'PAGI' => 'pagi',
-            'SHIFT_2', 'MALAM' => 'malam',
-            default => strtolower((string) $shift),
+            'SHIFT_1', 'PAGI'  => 'SHIFT_1',
+            'SHIFT_2', 'MALAM' => 'SHIFT_2',
+            default => strtoupper((string) $shift),
         };
     }
 
     private function shiftOptions(): array
     {
         return [
-            ['label' => 'SHIFT_1', 'value' => 'pagi',  'legacy_value' => 'SHIFT_1'],
-            ['label' => 'SHIFT_2', 'value' => 'malam', 'legacy_value' => 'SHIFT_2'],
+            ['label' => 'Shift 1', 'value' => 'SHIFT_1'],
+            ['label' => 'Shift 2', 'value' => 'SHIFT_2'],
         ];
     }
 }

@@ -56,8 +56,8 @@
                             class="border rounded px-3 py-2 w-full"
                         >
                             <option value="">All Shifts</option>
-                            <option value="pagi">Pagi</option>
-                            <option value="malam">Malam</option>
+                            <option value="SHIFT_1">Shift 1</option>
+                            <option value="SHIFT_2">Shift 2</option>
                         </select>
                     </div>
 

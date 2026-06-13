@@ -19,7 +19,7 @@ class StoreJobRequest extends FormRequest
             'description' => 'required|string',
             'site' => 'required|string|max:255',
             'category' => 'required|string|max:255',
-            'shift' => 'required|in:pagi,malam',
+            'shift' => 'required|in:SHIFT_1,SHIFT_2',
             'date' => 'required|date',
             'status' => 'sometimes|in:open,continue,closed,outstanding,cancel',
             'urgency' => 'sometimes|in:low,medium,high',

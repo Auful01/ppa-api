@@ -25,7 +25,7 @@ class UpdateJobRequest extends FormRequest
             'description' => 'sometimes|string',
             'site' => 'sometimes|string|max:255',
             'category' => 'sometimes|string|max:255',
-            'shift' => 'sometimes|in:pagi,malam',
+            'shift' => 'sometimes|in:SHIFT_1,SHIFT_2',
             'date' => 'sometimes|date',
             'status' => 'sometimes|in:open,continue,closed,outstanding,cancel',
             'urgency' => 'sometimes|in:low,medium,high',

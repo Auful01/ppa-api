@@ -14,7 +14,10 @@ return new class extends Migration {
             $table->text('description')->nullable();
             $table->string('site');
             $table->string('category');
-            $table->enum('shift', ['pagi', 'malam']);
+            // Production stores the tokens SHIFT_1/SHIFT_2 (web write-path +
+            // validation in:SHIFT_1,SHIFT_2). See ALTER migration
+            // 2026_06_12_000000_fix_daily_jobs_shift_values for existing DBs.
+            $table->enum('shift', ['SHIFT_1', 'SHIFT_2']);
             $table->date('date');
             $table->datetime('start_progress')->nullable();
             $table->datetime('end_progress')->nullable();
