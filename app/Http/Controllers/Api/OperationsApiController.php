@@ -9,6 +9,7 @@ use App\Models\RootCauseCategories;
 use App\Models\RootCauseProblem;
 use App\Models\User;
 use App\Support\Api\SiteContext;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
@@ -328,7 +329,7 @@ class OperationsApiController extends Controller
         $shift = $this->normalizeShift($request->input('shift'));
 
         $validated = $request->validate([
-            'format'     => ['nullable', 'string', 'in:csv,xlsx'],
+            'format'     => ['nullable', 'string', 'in:csv,xlsx,pdf'],
             'scope'      => ['nullable', 'string', 'in:scheduled,unscheduled,all'],
             'start_date' => ['nullable', 'date'],
             'end_date'   => ['nullable', 'date'],
@@ -343,36 +344,111 @@ class OperationsApiController extends Controller
             abort(403, 'Approve semua job yang tampil sebelum export.');
         }
 
-        $format = strtolower((string) ($validated['format'] ?? 'xlsx'));
-        $scope  = strtolower((string) ($validated['scope'] ?? 'scheduled'));
+        // Default = PDF (the Monitoring Jobs "Export All Report"). The standalone
+        // Job Assignment / Job Un-Schedule pages still request the scope-based
+        // CSV/XLSX spreadsheet via format=csv|xlsx; that path is preserved below.
+        $format = strtolower((string) ($validated['format'] ?? 'pdf'));
 
-        $rows = collect();
+        if (in_array($format, ['csv', 'xlsx'], true)) {
+            $scope = strtolower((string) ($validated['scope'] ?? 'scheduled'));
+            $rows  = collect();
 
-        if (in_array($scope, ['scheduled', 'all'], true)) {
-            $rows = $rows->concat(
-                $this->mapJobsForExport(
+            if (in_array($scope, ['scheduled', 'all'], true)) {
+                $rows = $rows->concat($this->mapJobsForExport(
                     $this->monitoringScheduledQuery($request, $site, $shift)->get(),
                     'scheduled'
-                )
-            );
-        }
-
-        if (in_array($scope, ['unscheduled', 'all'], true)) {
-            $rows = $rows->concat(
-                $this->mapJobsForExport(
+                ));
+            }
+            if (in_array($scope, ['unscheduled', 'all'], true)) {
+                $rows = $rows->concat($this->mapJobsForExport(
                     $this->monitoringUnscheduledQuery($request, $site, $shift)->get(),
                     'unscheduled'
-                )
+                ));
+            }
+
+            $filename = sprintf('monitoring-jobs-%s-%s.%s', strtolower($site), $scope, $format);
+
+            return Excel::download(
+                new MonitoringJobsExport($rows->values()),
+                $filename,
+                $format === 'csv' ? ExcelWriter::CSV : ExcelWriter::XLSX
             );
         }
 
-        $filename = sprintf('monitoring-jobs-%s-%s.%s', strtolower($site), $scope, $format);
+        // VERBATIM web parity with DailyJobMonitorControllerFinal@exportReportMonitoring:
+        // the web "Export All Report" action renders the `dailyJobs.report-monitoring`
+        // PDF (Job Assignment + Job Un-Schedule tables + diagram) and streams it as a
+        // download — it is NOT csv/xlsx. We reuse the same Blade view, the same data
+        // shape, and the same filename so the mobile download is byte-identical content.
+        $scheduledJobs   = $this->monitoringScheduledQuery($request, $site, $shift)->get();
+        $unscheduledJobs = $this->monitoringUnscheduledQuery($request, $site, $shift)->get();
 
-        return Excel::download(
-            new MonitoringJobsExport($rows->values()),
-            $filename,
-            $format === 'csv' ? ExcelWriter::CSV : ExcelWriter::XLSX
+        // crew_names — the Blade prints implode(', ', $job->crew_names).
+        $users = User::all(['id', 'name'])->keyBy('id');
+        foreach ($scheduledJobs as $job) {
+            $job->crew_names = collect($job->crew ?? [])
+                ->map(fn ($id) => $users[$id]->name ?? 'Unknown')->toArray();
+        }
+        foreach ($unscheduledJobs as $job) {
+            $job->crew_names = collect($job->crew ?? [])
+                ->map(fn ($id) => $users[$id]->name ?? 'Unknown')->toArray();
+        }
+
+        $jobAssignmentCount = $scheduledJobs->count();
+        $unscheduleCount    = $unscheduledJobs->count();
+        // The Blade diagram only draws Job Assignment + Job Un-Schedule bars; the
+        // percentages are over the two rendered categories. (The web computes the
+        // denominator over 4 categories incl. aduan/inspeksi, which the mobile
+        // monitoringIndex does not yet expose — the rendered TABLES are identical;
+        // only the diagram's denominator differs. Documented in the parity report.)
+        $totalJobs = $jobAssignmentCount + $unscheduleCount;
+        $jobAssignmentPct = $totalJobs > 0 ? round(($jobAssignmentCount / $totalJobs) * 100) : 0;
+        $unschedulePct    = $totalJobs > 0 ? round(($unscheduleCount / $totalJobs) * 100) : 0;
+
+        $data = [
+            'date'  => now()->format('d M Y'),
+            'shift' => $shift,
+            'assignments' => $scheduledJobs,
+            'unscheduled' => $unscheduledJobs,
+            'aduanData' => collect(),
+            'inspectionData' => [],
+            'job_assignment_count' => $jobAssignmentCount,
+            'unschedule_count' => $unscheduleCount,
+            'aduan_count' => 0,
+            'inspection_count' => 0,
+            'job_assignment_percentage' => $jobAssignmentPct,
+            'unschedule_percentage' => $unschedulePct,
+            'aduan_percentage' => 0,
+            'inspection_percentage' => 0,
+        ];
+
+        $pdf = Pdf::loadView('dailyJobs.report-monitoring', $data)->setPaper('A4', 'portrait');
+
+        // Filename — VERBATIM web parity (Final@exportReportMonitoring):
+        // "Rekap Monitoring Job {SITE} - {d F Y} - {SHIFT}.pdf".
+        $startDate    = $request->input('start_date');
+        $currentTime  = Carbon::now();
+        if (! $shift) {
+            if ($currentTime->format('H:i:s') >= '06:00:00' && $currentTime->format('H:i:s') <= '17:59:59') {
+                $shiftLabel = 'SHIFT_1';
+                $tanggalShift = $currentTime;
+            } else {
+                $shiftLabel = 'SHIFT_2';
+                $tanggalShift = $currentTime->hour < 6 ? $currentTime->copy()->subDay() : $currentTime;
+            }
+        } else {
+            $shiftLabel = $shift;
+            $tanggalShift = $startDate ? Carbon::parse($startDate) : $currentTime;
+        }
+
+        $fileName = sprintf(
+            'Rekap Monitoring Job %s - %s - %s.pdf',
+            $site,
+            $tanggalShift->translatedFormat('d F Y'),
+            $shiftLabel
         );
+
+        return $pdf->download($fileName);
     }
 
     // -------------------------------------------------------------------------

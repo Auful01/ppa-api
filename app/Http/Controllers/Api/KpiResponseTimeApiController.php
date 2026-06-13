@@ -42,7 +42,25 @@ class KpiResponseTimeApiController extends Controller
         $countClosed  = (clone $baseQuery)->where('status', 'closed')->count();
         $countOpen    = (clone $baseQuery)->where('status', 'open')->count();
         $countProgress = (clone $baseQuery)->where('status', 'progress')->count();
+        $countOutstanding = (clone $baseQuery)->where('status', 'outstanding')->count();
         $countCancel  = (clone $baseQuery)->where('status', 'cancel')->count();
+
+        // Complaint-category breakdown for the "Analisis Aduan" donut. Mirrors
+        // the web Dashboard "Analisis Aduan" chart: count complaints per
+        // category over the SAME period + site (the donut centre "Total Aduan"
+        // is the overall complaint count). Categories are dynamic — grouped by
+        // category_name — so any site's categories render without a hardcoded
+        // list. NULL/blank categories collapse into OTHER.
+        $categories = (clone $baseQuery)
+            ->selectRaw('UPPER(COALESCE(NULLIF(TRIM(category_name), ""), "OTHER")) as category, COUNT(*) as total')
+            ->groupBy('category')
+            ->orderByDesc('total')
+            ->get()
+            ->map(fn ($row) => [
+                'category' => $row->category,
+                'count'    => (int) $row->total,
+            ])
+            ->all();
 
         // Tickets that have a response recorded
         $respondedTickets = (clone $baseQuery)
@@ -99,11 +117,13 @@ class KpiResponseTimeApiController extends Controller
                     'closed'          => $countClosed,
                     'open'            => $countOpen,
                     'progress'        => $countProgress,
+                    'outstanding'     => $countOutstanding,
                     'cancel'          => $countCancel,
                     'responded'       => $respondedCount,
                     'avg_response'    => $avgFormatted,
                     'achievement'     => $achievement,
                 ],
+                'categories' => $categories,
                 'tickets' => $slowTickets,
             ],
             'meta' => [
