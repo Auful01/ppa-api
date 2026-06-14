@@ -17,14 +17,22 @@ use Maatwebsite\Excel\Excel as ExcelWriter;
 
 class OperationsApiController extends Controller
 {
-    private const ROLE_CREATE_JOB  = ['ict_developer', 'ict_group_leader'];
-    private const ROLE_UPDATE_JOB  = ['ict_developer', 'ict_group_leader', 'ict_admin', 'ict_technician'];
-    private const ROLE_DELETE_JOB  = ['ict_developer', 'ict_group_leader'];
+    private const ROLE_ALL_WRITE   = ['ict_developer', 'ict_group_leader', 'ict_section_head', 'ict_admin', 'ict_technician'];
+    // Source of truth: web DailyJobController/UnscheduleJobController gate
+    // create, update AND destroy IDENTICALLY — `if (role != ict_developer &&
+    // site != userSite) abort(403)` — i.e. the SAME role set (route middleware)
+    // for all three write actions, only the site differs. The old per-action
+    // lists (create/delete = [dev,GL] but update = [dev,GL,admin,tech]) diverged
+    // from web and caused "create works but edit/delete 403". Unify all three to
+    // the ICT write-role set; the developer-or-own-site gate stays in
+    // authorizeSiteAccess().
+    private const ROLE_CREATE_JOB  = self::ROLE_ALL_WRITE;
+    private const ROLE_UPDATE_JOB  = self::ROLE_ALL_WRITE;
+    private const ROLE_DELETE_JOB  = self::ROLE_ALL_WRITE;
     // Parity with the production Inertia page: DailyJobMonitorController@index
     // sets canApprove = in_array(role, ['ict_developer','ict_group_leader']) and
     // approveAll() authorizes the same two roles. Mirror it exactly here.
     private const ROLE_APPROVE_JOB = ['ict_group_leader', 'ict_developer'];
-    private const ROLE_ALL_WRITE   = ['ict_developer', 'ict_group_leader', 'ict_section_head', 'ict_admin', 'ict_technician'];
 
     // -------------------------------------------------------------------------
     // Job Assignment

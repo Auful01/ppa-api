@@ -180,7 +180,12 @@ class InventoryApiController extends Controller
         $recordSite = ! empty($config['site_column'])
             ? $record->getAttribute($config['site_column'])
             : SiteContext::resolve($request);
-        SiteContext::authorizeWrite($request, $recordSite);
+        // Parity with ControllersNew (InvComputerController@update etc.): the web
+        // update/destroy do NOT re-check the record's site — they only gate by
+        // role (route middleware). Cross-site isolation for non-any-site users is
+        // already enforced by authorizedInventoryQuery() (findOrFail → 404). The
+        // old per-record-site check could 403 valid edits, so gate by role only.
+        SiteContext::authorizeWrite($request);
 
         $payload = $this->normalizePayload($payload, $recordSite, $record);
 
@@ -200,10 +205,10 @@ class InventoryApiController extends Controller
     {
         $config = InventoryRegistry::get($type);
         $record = $this->authorizedInventoryQuery($request, $config)->findOrFail($id);
-        $recordSite = ! empty($config['site_column'])
-            ? $record->getAttribute($config['site_column'])
-            : SiteContext::resolve($request);
-        SiteContext::authorizeWrite($request, $recordSite);
+        // Role-only gate (ControllersNew parity) — see update() note. Soft delete
+        // is automatic for models using the SoftDeletes trait (all inventory
+        // models except InvMobileTower, which the web also hard-deletes).
+        SiteContext::authorizeWrite($request);
 
         $record->delete();
 
