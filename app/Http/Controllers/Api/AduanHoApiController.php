@@ -35,8 +35,22 @@ use Illuminate\Support\Facades\DB;
  */
 class AduanHoApiController extends Controller
 {
+    /**
+     * Pengaduan HO is restricted to Group Leader + ICT Developer (client
+     * requirement). Enforced on every endpoint so the API matches the menu
+     * visibility and can't be reached by other roles directly.
+     */
+    private function authorizeHo(Request $request): void
+    {
+        $role = $request->user()?->role;
+        if (! in_array($role, ['ict_group_leader', 'ict_developer'], true)) {
+            abort(403, 'You dont have permission to access this page.');
+        }
+    }
+
     public function index(Request $request)
     {
+        $this->authorizeHo($request);
         $user = $request->user();
         $nrp  = $user->nrp;
         $site = strtoupper((string) $user->site); // site_pelapor scope = reporter's own site
@@ -78,6 +92,7 @@ class AduanHoApiController extends Controller
      */
     public function meta(Request $request)
     {
+        $this->authorizeHo($request);
         $user = $request->user();
 
         $categories = DB::table('root_cause_categories')
@@ -97,6 +112,7 @@ class AduanHoApiController extends Controller
 
     public function show(Request $request, string $id)
     {
+        $this->authorizeHo($request);
         $aduan = Aduan::with('rootCause')->findOrFail($id);
 
         return response()->json(['data' => $aduan]);
@@ -108,6 +124,7 @@ class AduanHoApiController extends Controller
      */
     public function store(Request $request)
     {
+        $this->authorizeHo($request);
         $user = $request->user();
 
         $validated = $request->validate([
@@ -167,6 +184,7 @@ class AduanHoApiController extends Controller
 
     public function destroy(Request $request, string $id)
     {
+        $this->authorizeHo($request);
         $aduan = Aduan::findOrFail($id);
         $aduan->delete();
 

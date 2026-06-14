@@ -7,6 +7,7 @@ use App\Models\Aduan;
 use App\Support\Api\SiteContext;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class KpiResponseTimeApiController extends Controller
 {
@@ -17,12 +18,17 @@ class KpiResponseTimeApiController extends Controller
         $validated = $request->validate([
             'start_date' => ['nullable', 'date'],
             'end_date'   => ['nullable', 'date'],
+            'year'       => ['nullable', 'integer'],
             'site'       => ['nullable', 'string'],
         ]);
 
         $site = SiteContext::resolve($request);
+        $siteType = SiteContext::isHo($site) ? 'HO' : 'SITE';
 
         $now = Carbon::now();
+        // YEAR filter takes precedence (web countKpi: whereYear), then an
+        // explicit date range, otherwise default to the current month.
+        $year = $validated['year'] ?? null;
         $startDate = isset($validated['start_date'])
             ? Carbon::parse($validated['start_date'])->startOfDay()
             : $now->copy()->startOfMonth();
@@ -34,9 +40,13 @@ class KpiResponseTimeApiController extends Controller
         // `created_date` column (date the complaint was logged), not the
         // datetime `date_of_complaint`. Mirror it for identical row selection.
         $baseQuery = Aduan::query()
-            ->whereBetween('created_date', [$startDate->toDateString(), $endDate->toDateString()])
             ->where('site', $site)
             ->whereNull('deleted_at');
+        if ($year) {
+            $baseQuery->whereYear('created_date', $year);
+        } else {
+            $baseQuery->whereBetween('created_date', [$startDate->toDateString(), $endDate->toDateString()]);
+        }
 
         $totalAduan   = (clone $baseQuery)->count();
         $countClosed  = (clone $baseQuery)->where('status', 'closed')->count();
@@ -110,6 +120,29 @@ class KpiResponseTimeApiController extends Controller
         // A fast average legitimately yields > 100% — do not clamp it.
         $achievement = $avgSeconds > 0 ? round((self::THRESHOLD_SECONDS / $avgSeconds) * 100, 2) : 0;
 
+        // RESPONSE TIME PER KATEGORI — parity with web countKpi `kategoriList`:
+        // for every configured root-cause category (per site type) compute the
+        // AVG response time, formatted HH:MM:SS (00:00:00 when none). Built from
+        // root_cause_categories so the full client list renders (TELKOMSEL,
+        // RADIO, SERVER, SS6, WEBSITE, NETWORK, SAP, PC/NB, PRINTER, NETWORK
+        // BUILDING, NETWORK MT, GPS, SCANNER, OTHER ...) even with zero data.
+        $configuredCategories = DB::table('root_cause_categories')
+            ->where('site_type', $siteType)
+            ->pluck('category_root_cause');
+
+        $responseTimeCategories = $configuredCategories->map(function ($category) use ($baseQuery) {
+            $avgSeconds = (clone $baseQuery)
+                ->where('category_name', $category)
+                ->whereNotNull('response_time')
+                ->avg(DB::raw('TIME_TO_SEC(response_time)'));
+
+            return [
+                'category' => strtoupper((string) $category),
+                'time'     => $avgSeconds ? gmdate('H:i:s', (int) $avgSeconds) : '00:00:00',
+                'seconds'  => (int) ($avgSeconds ?? 0),
+            ];
+        })->values()->all();
+
         return response()->json([
             'data' => [
                 'summary' => [
@@ -124,10 +157,12 @@ class KpiResponseTimeApiController extends Controller
                     'achievement'     => $achievement,
                 ],
                 'categories' => $categories,
+                'response_time_categories' => $responseTimeCategories,
                 'tickets' => $slowTickets,
             ],
             'meta' => [
                 'site'              => $site,
+                'year'              => $year,
                 'start_date'        => $startDate->toDateString(),
                 'end_date'          => $endDate->toDateString(),
                 'threshold_seconds' => self::THRESHOLD_SECONDS,

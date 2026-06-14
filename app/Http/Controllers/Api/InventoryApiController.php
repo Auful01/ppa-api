@@ -10,7 +10,6 @@ use App\Support\Api\InventoryRegistry;
 use App\Support\Api\SiteContext;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 
 class InventoryApiController extends Controller
@@ -249,15 +248,23 @@ class InventoryApiController extends Controller
                 ->first();
             $deptCode = $department->code ?? $deptInput;
 
-            $latest = $scopeSite($model::query())
+            // Sequence is the trailing number embedded in the code and is scoped
+            // per site+dept. max_id is a (roughly) global creation counter, so the
+            // record with the highest max_id is NOT necessarily the one with the
+            // highest sequence (e.g. MHU/PLT: newest record is -016 while -040
+            // already exists). Take the MAX parsed sequence so we always return
+            // latest+1.
+            $codes = $scopeSite($model::query())
                 ->where('dept', $deptCode)
-                ->orderByDesc('max_id')
-                ->first();
+                ->pluck($codeColumn);
 
             $seq = 0;
-            if ($latest && $latest->{$codeColumn}) {
-                $parts = explode('-', (string) $latest->{$codeColumn});
-                $seq = (int) end($parts);
+            foreach ($codes as $existing) {
+                $parts = explode('-', (string) $existing);
+                $n = (int) end($parts);
+                if ($n > $seq) {
+                    $seq = $n;
+                }
             }
 
             $code = $sitePrefix . '-' . ($config['dept_infix'] ?? '') . '-' . $deptCode . '-'
@@ -282,15 +289,21 @@ class InventoryApiController extends Controller
             }
             $prefix = $company . $sitePrefix . ($config['company_code'] ?? '');
 
-            $latest = $scopeSite($model::query())
+            // Same reasoning as the dept branch: take the MAX trailing number of
+            // every code in scope rather than trusting max_id ordering, so the
+            // generated code is always latest+1.
+            $codes = $scopeSite($model::query())
                 ->where($codeColumn, 'like', $company . '%')
-                ->orderByDesc('max_id')
-                ->first();
+                ->pluck($codeColumn);
 
             $seq = 0;
-            if ($latest && $latest->{$codeColumn}
-                && preg_match('/(\d+)$/', (string) $latest->{$codeColumn}, $m)) {
-                $seq = (int) $m[1];
+            foreach ($codes as $existing) {
+                if (preg_match('/(\d+)$/', (string) $existing, $m)) {
+                    $n = (int) $m[1];
+                    if ($n > $seq) {
+                        $seq = $n;
+                    }
+                }
             }
 
             $code = $prefix . str_pad((string) (($seq % 10000) + 1), 3, '0', STR_PAD_LEFT);
@@ -337,33 +350,26 @@ class InventoryApiController extends Controller
             return null;
         }
 
-        $normalizedSite = SiteContext::isHo($site) ? 'HO' : strtoupper((string) $site);
-
-        $query = UserAll::query();
-        if ($normalizedSite === 'HO') {
-            $query->where(function ($builder) {
-                $builder->whereNull('site')->orWhere('site', 'HO');
-            });
-        } else {
-            $query->where('site', $normalizedSite);
-        }
-
-        $user = $query
-            ->where(function ($builder) use ($value) {
-                $builder->where('id', $value)->orWhere('nrp', $value);
-            })
+        // Parity with the web (InvComputer/InvLaptopController@store/update), which
+        // looks the user up by username with NO site scoping. We additionally
+        // accept id/nrp because the mobile create form sends the user_alls `id`
+        // and the edit form re-sends the stored FK. Critically we must NOT throw:
+        // the old site-scoped lookup raised a 422 whenever the stored user's site
+        // drifted from the record's site, which broke every computer/laptop edit.
+        $user = UserAll::query()
+            ->where('id', $value)
+            ->orWhere('nrp', $value)
+            ->orWhere('username', $value)
             ->first();
 
         if ($user) {
             return (int) $user->id;
         }
 
-        throw new HttpResponseException(response()->json([
-            'message' => 'Selected user_alls_id is invalid for this site.',
-            'errors' => [
-                'user_alls_id' => ['User tidak ditemukan pada site yang dipilih. Gunakan nilai `id` atau `nrp` dari endpoint meta.'],
-            ],
-        ], 422));
+        // Could not resolve by id/nrp/username — the value is not a real user_alls
+        // row, so null it out (column is nullable) rather than passing through an
+        // id that would trip the foreign key. Never block the write.
+        return null;
     }
 
     private function authorizedInventoryQuery(Request $request, array $config)

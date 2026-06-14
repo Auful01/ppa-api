@@ -39,9 +39,11 @@ class KpiInspeksiApiController extends Controller
         $modelClass = self::DEVICE_MODELS[$deviceType] ?? InspeksiLaptop::class;
 
         // Year summary (panel "Ringkasan Tahun"). Independent of chart dimension.
-        $total  = $modelClass::where('site', $site)->where('year', $year)->count();
-        $sudah  = $modelClass::where('site', $site)->where('year', $year)->where('inspection_status', 'Y')->count();
-        $belum  = $modelClass::where('site', $site)->where('year', $year)->where('inspection_status', 'N')->count();
+        // SCRAP must be EXCLUDED from the denominator (client requirement + web
+        // parity): only "Sudah Inspeksi" (Y) and "Belum Inspeksi" (N) count.
+        $total  = $this->applyScrapFilter($modelClass::where('site', $site)->where('year', $year), $deviceType)->count();
+        $sudah  = $this->applyScrapFilter($modelClass::where('site', $site)->where('year', $year), $deviceType)->where('inspection_status', 'Y')->count();
+        $belum  = $this->applyScrapFilter($modelClass::where('site', $site)->where('year', $year), $deviceType)->where('inspection_status', 'N')->count();
 
         $percentSudah = $total > 0 ? round(($sudah / $total) * 100, 2) : 0;
         $percentBelum = $total > 0 ? round(($belum / $total) * 100, 2) : 0;
@@ -77,6 +79,33 @@ class KpiInspeksiApiController extends Controller
     }
 
     /**
+     * Exclude SCRAP assets from an inspeksi query, device-aware, mirroring
+     * KpiInspeksiController::countKpi:
+     *   computer/laptop/printer -> inventory_status != 'SCRAP'
+     *     (printer additionally requires a real inspection_status: not null, not '-')
+     *   mobile_tower            -> related inventory mt.status != 'SCRAP'
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    private function applyScrapFilter($query, string $deviceType)
+    {
+        if ($deviceType === 'mobile_tower') {
+            return $query->whereHas('mt', function ($q) {
+                $q->where('status', '!=', 'SCRAP');
+            });
+        }
+
+        $query->where('inventory_status', '!=', 'SCRAP');
+
+        if ($deviceType === 'printer') {
+            $query->whereNotNull('inspection_status')->where('inspection_status', '!=', '-');
+        }
+
+        return $query;
+    }
+
+    /**
      * Mirror of KpiInspeksiController::countKpi chart construction.
      *
      * @return array{0: array<int,string>, 1: array<int,float>, 2: array<int,float>}
@@ -93,11 +122,13 @@ class KpiInspeksiApiController extends Controller
             $belum[]  = $countAll ? round(($countN / $countAll) * 100, 2) : 0;
         };
 
-        $counts = function (array $where) use ($modelClass, $site) {
+        $counts = function (array $where) use ($modelClass, $site, $deviceType) {
             $base = $modelClass::where('site', $site);
             foreach ($where as $col => $val) {
                 $base->where($col, $val);
             }
+            // Exclude SCRAP from every period bucket too (web parity).
+            $this->applyScrapFilter($base, $deviceType);
             return [
                 (clone $base)->count(),
                 (clone $base)->where('inspection_status', 'Y')->count(),

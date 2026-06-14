@@ -206,11 +206,15 @@ class AduanApiController extends Controller
             ->where('site_type', $siteType)
             ->get();
 
+        // PIC / crew list — parity with the web Aduan controllers:
+        //   per-site (AduanBibController etc.): where('site', X)->where('ict_group','Y')
+        //   HO (AduanController@index): ict_ho @ HO (HO users carry no ict_group flag,
+        //     so filtering them by 'Y' would wrongly empty the list).
         $crewQuery = User::query()->select('id', 'name', 'role', 'site');
         if (SiteContext::isHo($site)) {
-            $crewQuery->where('site', 'HO');
+            $crewQuery->where('site', 'HO')->where('role', 'ict_ho');
         } else {
-            $crewQuery->where('site', $site);
+            $crewQuery->where('site', $site)->where('ict_group', 'Y');
         }
 
         return response()->json([
