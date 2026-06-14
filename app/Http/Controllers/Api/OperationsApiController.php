@@ -251,21 +251,27 @@ class OperationsApiController extends Controller
         $this->authorizeRole($request, self::ROLE_APPROVE_JOB);
         $this->authorizeSiteAccess($request, $site);
 
-        // VERBATIM web parity with DailyJobMonitorController@approveAll: approve
-        // every job for this site dated today that is still unapproved (NULL
-        // approval_status), regardless of shift/status/category. This is what
-        // flips allApprovedToday() to true so the button switches to "Export
-        // All Report" exactly as the Inertia page does.
-        $count = DailyJob::whereDate('date', Carbon::today())
-            ->where('site', $site)
-            ->whereNull('approval_status')
-            ->update([
+        // Approve exactly the VISIBLE unapproved rows for the active filter (the
+        // same set the Monitoring page shows and the gate evaluates), so after
+        // approving, all visible rows are approved and the button flips to
+        // "Export All Report". The previous version approved only `date = today`,
+        // which never touched a filtered past range — so a range of unapproved
+        // rows could never be approved from the UI.
+        $shift = $this->normalizeShift($request->input('shift'));
+        $ids = $this->monitoringScheduledQuery($request, $site, $shift)->get()
+            ->concat($this->monitoringUnscheduledQuery($request, $site, $shift)->get())
+            ->reject(fn ($job) => $this->jobIsApproved($job))
+            ->pluck('id');
+
+        $count = $ids->isEmpty()
+            ? 0
+            : DailyJob::whereIn('id', $ids)->update([
                 'approval_status' => self::APPROVAL_VALUE,
                 'updated_by'      => $request->user()->id,
                 'updated_at'      => now(),
             ]);
 
-        return response()->json(['message' => "Berhasil approve {$count} job hari ini"]);
+        return response()->json(['message' => "Berhasil approve {$count} job"]);
     }
 
     // -------------------------------------------------------------------------
@@ -280,22 +286,32 @@ class OperationsApiController extends Controller
         $scheduledJobs   = $this->monitoringScheduledQuery($request, $site, $shift)->get();
         $unscheduledJobs = $this->monitoringUnscheduledQuery($request, $site, $shift)->get();
 
-        // Approval gate — VERBATIM web parity (allApprovedToday): true when no job
-        // for the active date+shift+site is still missing approval_status. This is
-        // the exact predicate MonitoringJobsDashboard.vue uses for the buttons.
-        $allApproved = $this->allApprovedToday($request, $site, $shift);
-        $hasJobs     = ($scheduledJobs->count() + $unscheduledJobs->count()) > 0;
+        // Approval gate — evaluated over the VISIBLE records (the exact rows the
+        // page renders), NOT a separate today/operational-shift query. The old
+        // allApprovedToday() looked at `date = today`, so with shift=All it
+        // ignored the filtered range entirely: a range whose visible rows were
+        // all approved still showed "Approve Job" (and vice-versa). A row counts
+        // as approved iff approval_status === 'approved' — the SAME truth the
+        // per-row green icon uses (is_approved is unreliable here: rows can be
+        // approval_status='approved' while is_approved=0).
+        $visible         = $scheduledJobs->concat($unscheduledJobs);
+        $visibleCount    = $visible->count();
+        $unapprovedCount = $visible->reject(fn ($job) => $this->jobIsApproved($job))->count();
+        $approvedCount   = $visibleCount - $unapprovedCount;
+        $hasJobs         = $visibleCount > 0;
+        $allApproved     = $hasJobs && $unapprovedCount === 0;
 
         // Approve Job (batch) hanya untuk role approver; lihat approveBatch().
         $canApprove = in_array($request->user()->role, self::ROLE_APPROVE_JOB, true);
 
-        // Single primary action, identik dengan web MonitoringJobsDashboard.vue:
-        //   Export All Report : v-if="allApprovedToday"
-        //   Approve Job       : v-if="canApprove && !allApprovedToday"
-        //   (selain itu)      : tidak ada tombol.
-        $primaryAction = $allApproved
-            ? 'export'
-            : ($canApprove ? 'approve' : 'none');
+        // Single primary action (parity with MonitoringJobsDashboard.vue button
+        // gate, now keyed on the visible set):
+        //   Export All Report : all visible rows approved (v-if allApproved)
+        //   Approve Job       : some row unapproved AND role may approve
+        //   none              : no visible rows, or unapproved + cannot approve
+        $primaryAction = ! $hasJobs
+            ? 'none'
+            : ($allApproved ? 'export' : ($canApprove ? 'approve' : 'none'));
 
         return response()->json([
             'data' => [
@@ -308,6 +324,11 @@ class OperationsApiController extends Controller
                 // Alias eksplisit sesuai kontrak metadata Monitoring Jobs.
                 'is_approved'   => $allApproved,
                 'has_jobs'      => $hasJobs,
+                // Visibility debug counters (also drive nothing client-side, but
+                // make the export/approve decision auditable from the response).
+                'visible_count'    => $visibleCount,
+                'approved_count'   => $approvedCount,
+                'unapproved_count' => $unapprovedCount,
                 'users'         => User::query()->select('id', 'name')->orderBy('name')->get(),
                 'shift_options' => $this->shiftOptions(),
                 'filters'       => array_merge(
@@ -315,6 +336,7 @@ class OperationsApiController extends Controller
                     ['shift' => $shift]
                 ),
                 'can_approve'      => $canApprove,
+                'can_export'       => $allApproved,
                 'export_ready'     => $allApproved,
                 'export_available' => $allApproved,
                 'primary_action'   => $primaryAction,
@@ -336,11 +358,10 @@ class OperationsApiController extends Controller
             'status'     => ['nullable', 'string'],
         ]);
 
-        // Export gate uses the SAME predicate as the button (allApprovedToday),
-        // so whenever the mobile UI shows "Export All Report" the download
-        // succeeds — matching the web, where the export link is rendered exactly
-        // when allApprovedToday is true.
-        if (! $this->allApprovedToday($request, $site, $shift)) {
+        // Export gate uses the SAME predicate as the button (visible records all
+        // approved), so whenever the UI shows "Export All Report" the download
+        // succeeds, and an unapproved visible row blocks it.
+        if (! $this->visibleApprovalState($request, $site, $shift)['all_approved']) {
             abort(403, 'Approve semua job yang tampil sebelum export.');
         }
 
@@ -789,38 +810,28 @@ class OperationsApiController extends Controller
     }
 
     /**
-     * Web parity for the Export-vs-Approve button gate
-     * (DailyJobMonitorController@index $allApprovedToday). True when there is no
-     * job for the active date+shift+site still missing an approval_status. This
-     * is the SAME predicate the Inertia page uses to flip "Approve Job" into
-     * "Export All Report", so the mobile button state matches the web exactly.
+     * Approval state of the VISIBLE Monitoring records for the active filter —
+     * the single source of truth for the Approve/Export gate. Evaluates the
+     * exact scheduled + unscheduled rows the page renders (NOT a today-based
+     * query), so the button always agrees with what the user sees. A row is
+     * approved iff approval_status === 'approved' (same as the green icon).
+     *
+     * @return array{count:int,approved:int,unapproved:int,all_approved:bool}
      */
-    private function allApprovedToday(Request $request, string $site, ?string $shift): bool
+    private function visibleApprovalState(Request $request, string $site, ?string $shift): array
     {
-        $startDate = $request->input('start_date');
+        $visible = $this->monitoringScheduledQuery($request, $site, $shift)->get()
+            ->concat($this->monitoringUnscheduledQuery($request, $site, $shift)->get());
 
-        if ($startDate && $shift) {
-            $approvalDate = $startDate;
-            $approvalShift = $shift;
-        } else {
-            $now = now();
+        $count      = $visible->count();
+        $unapproved = $visible->reject(fn ($job) => $this->jobIsApproved($job))->count();
 
-            if ($now->format('H:i:s') >= '06:00:00' && $now->format('H:i:s') <= '17:59:59') {
-                $approvalDate = $now->toDateString();
-                $approvalShift = 'SHIFT_1';
-            } else {
-                $approvalShift = 'SHIFT_2';
-                $approvalDate = $now->hour < 6
-                    ? $now->copy()->subDay()->toDateString()
-                    : $now->toDateString();
-            }
-        }
-
-        return DailyJob::whereDate('date', $approvalDate)
-            ->where('shift', $approvalShift)
-            ->where('site', $site)
-            ->whereNull('approval_status')
-            ->doesntExist();
+        return [
+            'count'        => $count,
+            'approved'     => $count - $unapproved,
+            'unapproved'   => $unapproved,
+            'all_approved' => $count > 0 && $unapproved === 0,
+        ];
     }
 
     private function mapJobsForExport($jobs, string $jobType)

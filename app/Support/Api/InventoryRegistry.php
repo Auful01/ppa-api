@@ -20,6 +20,14 @@ class InventoryRegistry
 {
     public static function all(): array
     {
+        // code_strategy / company_code / dept_infix mirror the web per-type
+        // generateCode() (source of truth):
+        //   company: {COMPANY}{SITE}{company_code}{seq:3}; seq scoped by site +
+        //            code LIKE 'COMPANY%' (AP/Switch/Printer/Wireless/CCTV/
+        //            Scanner). Company ∈ {PPA, AMM}.
+        //   dept:    {SITE}-{dept_infix}-{deptCode}-{seq:3}; seq scoped by site +
+        //            dept (Laptop=NB, Computer=PC).
+        //   none:    no company/dept driver (Mobile Tower).
         return [
             'access-point' => [
                 'model' => InvAp::class,
@@ -29,6 +37,8 @@ class InventoryRegistry
                 'relations' => [],
                 'inspection_model' => null,
                 'complaint_column' => 'inventory_number',
+                'code_strategy' => 'company',
+                'company_code' => 'AP',
             ],
             'cctv' => [
                 'model' => InvCctv::class,
@@ -38,6 +48,8 @@ class InventoryRegistry
                 'relations' => ['switch'],
                 'inspection_model' => null,
                 'complaint_column' => 'cctv_code',
+                'code_strategy' => 'company',
+                'company_code' => 'CCTV',
             ],
             'computer' => [
                 'model' => InvComputer::class,
@@ -48,6 +60,8 @@ class InventoryRegistry
                 'inspection_model' => InspeksiComputer::class,
                 'inspection_foreign_key' => 'inv_computer_id',
                 'complaint_column' => 'computer_code',
+                'code_strategy' => 'dept',
+                'dept_infix' => 'PC',
             ],
             'laptop' => [
                 'model' => InvLaptop::class,
@@ -58,6 +72,8 @@ class InventoryRegistry
                 'inspection_model' => InspeksiLaptop::class,
                 'inspection_foreign_key' => 'inv_laptop_id',
                 'complaint_column' => 'laptop_code',
+                'code_strategy' => 'dept',
+                'dept_infix' => 'NB',
             ],
             'mobile-tower' => [
                 'model' => InvMobileTower::class,
@@ -68,6 +84,7 @@ class InventoryRegistry
                 'inspection_model' => InspeksiMobileTower::class,
                 'inspection_foreign_key' => 'inv_mt_id',
                 'complaint_column' => 'inventory_number',
+                'code_strategy' => 'none',
             ],
             'printer' => [
                 'model' => InvPrinter::class,
@@ -80,6 +97,8 @@ class InventoryRegistry
                 'complaint_column' => 'printer_code',
                 // live_schema: printer_code NOT NULL — must be supplied on create
                 'required_fields' => ['printer_code'],
+                'code_strategy' => 'company',
+                'company_code' => 'PRT',
             ],
             'scanner' => [
                 'model' => InvScanner::class,
@@ -89,6 +108,8 @@ class InventoryRegistry
                 'relations' => [],
                 'inspection_model' => null,
                 'complaint_column' => 'scanner_code',
+                'code_strategy' => 'company',
+                'company_code' => 'SCN',
             ],
             'switch' => [
                 'model' => InvSwitch::class,
@@ -98,6 +119,8 @@ class InventoryRegistry
                 'relations' => [],
                 'inspection_model' => null,
                 'complaint_column' => 'inventory_number',
+                'code_strategy' => 'company',
+                'company_code' => 'SW',
             ],
             'wireless' => [
                 'model' => InvWirelless::class,
@@ -107,6 +130,8 @@ class InventoryRegistry
                 'relations' => [],
                 'inspection_model' => null,
                 'complaint_column' => 'inventory_number',
+                'code_strategy' => 'company',
+                'company_code' => 'BB',
             ],
         ];
     }

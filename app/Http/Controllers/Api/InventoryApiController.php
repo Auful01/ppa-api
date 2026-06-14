@@ -26,12 +26,28 @@ class InventoryApiController extends Controller
             SiteContext::apply($query, $config['site_column'], $site);
         }
 
+        // Global search like the web DataTable: match the term in ANY searchable
+        // column (not just code + name). Columns are intersected with the model's
+        // fillable so a type that lacks a column never breaks the query.
         if ($request->filled('search')) {
             $term = '%' . $request->string('search') . '%';
-            $query->where(function ($builder) use ($config, $term) {
-                $builder
-                    ->where($config['code_column'], 'like', $term)
-                    ->orWhere($config['name_column'], 'like', $term);
+            $fillable = (new $model())->getFillable();
+            $candidates = array_unique(array_merge(
+                [$config['code_column'], $config['name_column']],
+                array_intersect([
+                    'inventory_number', 'laptop_code', 'computer_code', 'printer_code',
+                    'scanner_code', 'cctv_code', 'mt_code', 'device_name', 'laptop_name',
+                    'computer_name', 'item_name', 'cctv_name', 'type_mt', 'serial_number',
+                    'number_asset_ho', 'assets_category', 'merk', 'model', 'ip_address',
+                    'location', 'status', 'condition', 'dept', 'note', 'spesifikasi', 'aplikasi',
+                ], $fillable)
+            ));
+            $query->where(function ($builder) use ($candidates, $term) {
+                foreach (array_values($candidates) as $i => $col) {
+                    $i === 0
+                        ? $builder->where($col, 'like', $term)
+                        : $builder->orWhere($col, 'like', $term);
+                }
             });
         }
 
@@ -48,6 +64,7 @@ class InventoryApiController extends Controller
 
     public function meta(Request $request, string $type)
     {
+        $config = InventoryRegistry::get($type);
         $site = SiteContext::resolve($request);
 
         $departmentQuery = Department::query()->orderBy('department_name');
@@ -62,11 +79,33 @@ class InventoryApiController extends Controller
             });
         }
 
+        // CCTV "Switch" dropdown (web CctvController@create passes InvSwitch HO
+        // list; value = id, label = inventory_number). Only relevant for cctv but
+        // harmless to include for every type.
+        $switches = $type === 'cctv'
+            ? \App\Models\InvSwitch::query()
+                ->where(function ($q) use ($site) {
+                    SiteContext::isHo($site)
+                        ? $q->whereNull('site')->orWhere('site', 'HO')
+                        : $q->where('site', strtoupper((string) $site));
+                })
+                ->orderBy('inventory_number')
+                ->get(['id', 'inventory_number'])
+            : collect();
+
         return response()->json([
             'type' => $type,
             'site' => $site,
+            // Drives the create form: 'dept' → show Department selector (laptop/
+            // computer); 'company' → show Company selector (AP/switch/printer/
+            // wireless/cctv/scanner); 'none' → no auto-code (mobile-tower).
+            'code_strategy' => $config['code_strategy'] ?? 'none',
+            // Company options are hardcoded PPA/AMM on the web (VueMultiselect).
+            'companies' => [['name' => 'PPA'], ['name' => 'AMM']],
             'departments' => $departmentQuery->get(),
             'users' => $userAllQuery->get(['id', 'nrp', 'username', 'department', 'site']),
+            // CCTV switch dropdown source.
+            'switches' => $switches,
         ]);
     }
 
@@ -181,74 +220,85 @@ class InventoryApiController extends Controller
         $codeColumn = $config['code_column'];
         $siteColumn = $config['site_column'] ?? 'site';
         $site = SiteContext::resolve($request) ?? 'HO';
+        $sitePrefix = SiteContext::isHo($site) ? 'HO' : strtoupper((string) $site);
+        $strategy = $config['code_strategy'] ?? 'none';
 
-        // SOURCE OF TRUTH: laptop & computer use a DEPARTMENT-SCOPED code on the
-        // web (InvLaptopController/InvComputerController::generateCode):
-        //   {SITE}-NB-{deptCode}-{seq:3}  (laptop)
-        //   {SITE}-PC-{deptCode}-{seq:3}  (computer)
-        // The sequence resets per department, so we must scope by `dept`. The
-        // generic trailing-number increment below is only correct for the
-        // non-dept types (AP/switch/wireless/cctv/scanner/MT).
-        $deptInfix = ['laptop' => 'NB', 'computer' => 'PC'];
-        $normalizedType = strtolower($type);
-        if (isset($deptInfix[$normalizedType]) && $request->filled('dept')) {
+        // Scope a query to the active site (HO = null/HO), mirroring the web
+        // per-site controllers that hardcode where('site', '<SITE>').
+        $scopeSite = function ($query) use ($siteColumn, $site, $sitePrefix) {
+            if (SiteContext::isHo($site)) {
+                $query->where(fn ($w) => $w->whereNull($siteColumn)->orWhere($siteColumn, 'HO'));
+            } else {
+                $query->where($siteColumn, $sitePrefix);
+            }
+            return $query;
+        };
+
+        // DEPARTMENT-SCOPED (laptop/computer) — web InvLaptop/InvComputer::
+        // generateCode: {SITE}-{NB|PC}-{deptCode}-{seq:3}, sequence per site+dept.
+        if ($strategy === 'dept') {
+            if (! $request->filled('dept')) {
+                return response()->json(
+                    ['code' => '', 'message' => 'Pilih department terlebih dahulu.'],
+                    422
+                );
+            }
             $deptInput = trim((string) $request->string('dept'));
             $department = Department::where('department_name', $deptInput)
                 ->orWhere('code', $deptInput)
                 ->first();
             $deptCode = $department->code ?? $deptInput;
-            $sitePrefix = SiteContext::isHo($site) ? 'HO' : strtoupper((string) $site);
 
-            $latestDept = $model::query()
-                ->when(
-                    SiteContext::isHo($site),
-                    fn ($q) => $q->where(fn ($w) => $w->whereNull($siteColumn)->orWhere($siteColumn, 'HO')),
-                    fn ($q) => $q->where($siteColumn, $sitePrefix)
-                )
+            $latest = $scopeSite($model::query())
                 ->where('dept', $deptCode)
                 ->orderByDesc('max_id')
                 ->first();
 
             $seq = 0;
-            if ($latestDept && $latestDept->{$codeColumn}) {
-                $parts = explode('-', (string) $latestDept->{$codeColumn});
+            if ($latest && $latest->{$codeColumn}) {
+                $parts = explode('-', (string) $latest->{$codeColumn});
                 $seq = (int) end($parts);
             }
 
-            $code = $sitePrefix . '-' . $deptInfix[$normalizedType] . '-' . $deptCode . '-'
+            $code = $sitePrefix . '-' . ($config['dept_infix'] ?? '') . '-' . $deptCode . '-'
                 . str_pad((string) (($seq % 10000) + 1), 3, '0', STR_PAD_LEFT);
 
-            return response()->json(['code' => $code]);
+            return response()->json(['code' => $code, 'dept' => $deptCode]);
         }
 
-        $latest = $model::query()
-            ->when(! empty($siteColumn), function ($query) use ($siteColumn, $site) {
-                if (SiteContext::isHo($site)) {
-                    $query->where(function ($q) use ($siteColumn) {
-                        $q->whereNull($siteColumn)->orWhere($siteColumn, 'HO');
-                    });
-                } else {
-                    $query->where($siteColumn, $site);
-                }
-            })
-            ->orderByDesc('max_id')
-            ->first();
+        // COMPANY-SCOPED (AP/switch/printer/wireless/cctv/scanner) — web Inv*::
+        // generateCode: {COMPANY}{SITE}{company_code}{seq:3}, sequence per
+        // site + code LIKE 'COMPANY%'. Company ∈ {PPA, AMM} (hardcoded in web).
+        if ($strategy === 'company') {
+            $companyInput = strtoupper(trim(
+                (string) ($request->input('company.name') ?? $request->string('company'))
+            ));
+            $company = in_array($companyInput, ['PPA', 'AMM'], true) ? $companyInput : null;
+            if ($company === null) {
+                return response()->json(
+                    ['code' => '', 'message' => 'Pilih company (PPA / AMM) terlebih dahulu.'],
+                    422
+                );
+            }
+            $prefix = $company . $sitePrefix . ($config['company_code'] ?? '');
 
-        if (! $latest) {
-            return response()->json(['code' => '']);
+            $latest = $scopeSite($model::query())
+                ->where($codeColumn, 'like', $company . '%')
+                ->orderByDesc('max_id')
+                ->first();
+
+            $seq = 0;
+            if ($latest && $latest->{$codeColumn}
+                && preg_match('/(\d+)$/', (string) $latest->{$codeColumn}, $m)) {
+                $seq = (int) $m[1];
+            }
+
+            $code = $prefix . str_pad((string) (($seq % 10000) + 1), 3, '0', STR_PAD_LEFT);
+
+            return response()->json(['code' => $code, 'company' => $company]);
         }
 
-        $existingCode = (string) $latest->{$codeColumn};
-
-        if (preg_match('/^(.*?)(\d+)$/', $existingCode, $matches)) {
-            $prefix = $matches[1];
-            $lastNumber = (int) $matches[2];
-            $width = max(strlen($matches[2]), 3);
-            $nextCode = $prefix . str_pad($lastNumber + 1, $width, '0', STR_PAD_LEFT);
-
-            return response()->json(['code' => $nextCode]);
-        }
-
+        // strategy 'none' (mobile-tower) — no company/dept auto-code on the web.
         return response()->json(['code' => '']);
     }
 
