@@ -42,8 +42,11 @@ class AduanHoApiController extends Controller
      */
     private function authorizeHo(Request $request): void
     {
+        // ControllersNew is the source of truth: web web.php gates /aduan-ho to
+        // ict_developer + ict_group_leader + ict_technician (route checkRole).
+        // Match it exactly — no broader, no narrower.
         $role = $request->user()?->role;
-        if (! in_array($role, ['ict_group_leader', 'ict_developer'], true)) {
+        if (! in_array($role, ['ict_developer', 'ict_group_leader', 'ict_technician'], true)) {
             abort(403, 'You dont have permission to access this page.');
         }
     }
