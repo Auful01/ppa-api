@@ -38,6 +38,13 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
+        // API routes must ALWAYS answer with JSON (never an HTML error page),
+        // even if a client forgets the Accept header — so Flutter never has to
+        // parse a rendered 404/419/500 page on update/delete.
+        $exceptions->shouldRenderJsonWhen(function (Request $request, \Throwable $e) {
+            return $request->is('api/*') || $request->expectsJson();
+        });
+
         $exceptions->render(function (NotFoundHttpException $exception, Request $request) {
             if ($request->is('/')) {
                 return redirect('/login');
