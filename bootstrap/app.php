@@ -6,8 +6,10 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Support\Api\ApiExceptionRenderer;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Illuminate\Http\Request;
+use Throwable;
 
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -40,9 +42,22 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withExceptions(function (Exceptions $exceptions) {
         // API routes must ALWAYS answer with JSON (never an HTML error page),
         // even if a client forgets the Accept header — so Flutter never has to
-        // parse a rendered 404/419/500 page on update/delete.
-        $exceptions->shouldRenderJsonWhen(function (Request $request, \Throwable $e) {
+        // parse a rendered 404/419/500 page.
+        $exceptions->shouldRenderJsonWhen(function (Request $request, Throwable $e) {
             return $request->is('api/*') || $request->expectsJson();
+        });
+
+        // Every exception on an /api/* (or JSON) request is rendered through a
+        // single formatter that emits a consistent { success:false, message, … }
+        // envelope. This is FORMATTING ONLY — it never alters who is allowed to
+        // do what; it just turns an already-thrown exception into JSON. Returning
+        // null for non-API requests leaves the Inertia/web error pages untouched.
+        $exceptions->render(function (Throwable $e, Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return ApiExceptionRenderer::render($e);
+            }
+
+            return null;
         });
 
         $exceptions->render(function (NotFoundHttpException $exception, Request $request) {
