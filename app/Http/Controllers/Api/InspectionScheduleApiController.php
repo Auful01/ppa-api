@@ -17,20 +17,22 @@ class InspectionScheduleApiController extends Controller
         $device = (string) $request->input('device', 'laptop');
         $this->authorizeSite($request, $site, false);
 
-        $year = now()->year;
-        $month = now()->month;
-        $quarter = match (true) {
-            $month <= 3 => 'Q1',
-            $month <= 6 => 'Q2',
-            $month <= 9 => 'Q3',
+        $currentMonth = now()->month;
+        $currentQuarter = match (true) {
+            $currentMonth <= 3 => 'Q1',
+            $currentMonth <= 6 => 'Q2',
+            $currentMonth <= 9 => 'Q3',
             default => 'Q4',
         };
+        $year = (int) $request->integer('year', now()->year);
+        $month = $request->filled('month') ? (int) $request->integer('month') : null;
+        $quarter = $request->string('quarter')->trim()->upper()->value() ?: null;
 
         [$schedules, $summary, $stats] = match ($device) {
-            'computer' => $this->computerData($site, $year, $quarter),
+            'computer' => $this->computerData($site, $year, $month, $quarter),
             'printer' => $this->printerData($site, $year, $month),
             'mobile_tower' => $this->mobileTowerData($site, $year, $month),
-            default => $this->laptopData($site, $year),
+            default => $this->laptopData($site, $year, $month),
         };
 
         $total = max((int) ($stats->total ?? 0), 1);
@@ -48,8 +50,8 @@ class InspectionScheduleApiController extends Controller
                 'site' => $site,
                 'device' => $device,
                 'year' => $year,
-                'month' => $month,
-                'quarter' => $quarter,
+                'month' => $month ?? $currentMonth,
+                'quarter' => $quarter ?: $currentQuarter,
             ],
         ]);
     }
@@ -114,7 +116,7 @@ class InspectionScheduleApiController extends Controller
         return SiteContext::resolve($request) ?? 'HO';
     }
 
-    private function laptopData(string $site, int $year): array
+    private function laptopData(string $site, int $year, ?int $month = null): array
     {
         $hasActualInspection = Schema::hasColumn('schedule_laptop', 'actual_inspection');
         $hasYearColumn = Schema::hasColumn('schedule_laptop', 'tahun');
@@ -142,6 +144,7 @@ class InspectionScheduleApiController extends Controller
                 fn ($query) => $query->where('schedule_laptop.tahun', $year),
                 fn ($query) => $query->whereYear('schedule_laptop.tanggal_inspection', $year)
             )
+            ->when($month !== null, fn ($query) => $query->whereMonth('schedule_laptop.tanggal_inspection', $month))
             ->get();
 
         $summary = collect($schedules)->groupBy(fn ($item) => Carbon::parse($item->tanggal_inspection)->format('F'))
@@ -158,6 +161,7 @@ class InspectionScheduleApiController extends Controller
                     fn ($query) => $query->where('tahun', $year),
                     fn ($query) => $query->whereYear('tanggal_inspection', $year)
                 )
+                ->when($month !== null, fn ($query) => $query->whereMonth('tanggal_inspection', $month))
                 ->whereNotNull('actual_inspection')
                 ->selectRaw("SUM(CASE WHEN DATE(actual_inspection) = DATE(tanggal_inspection) THEN 1 ELSE 0 END) AS sudahSesuai, SUM(CASE WHEN DATE(actual_inspection) != DATE(tanggal_inspection) THEN 1 ELSE 0 END) AS belumSesuai, COUNT(*) AS total")
                 ->first()
@@ -170,14 +174,15 @@ class InspectionScheduleApiController extends Controller
         return [$schedules, $summary, $stats];
     }
 
-    private function computerData(string $site, int $year, string $quarter): array
+    private function computerData(string $site, int $year, ?int $month = null, ?string $quarter = null): array
     {
         $schedules = DB::table('schedule_computer')
             ->join('inv_computers', 'schedule_computer.id_computer', '=', 'inv_computers.id')
             ->select('schedule_computer.id', 'schedule_computer.tanggal_inspection', 'schedule_computer.actual_inspection', 'inv_computers.computer_code AS device_code', 'inv_computers.dept', 'inv_computers.site')
             ->where('schedule_computer.site', $site)
-            ->where('schedule_computer.quarter', $quarter)
             ->where('schedule_computer.tahun', $year)
+            ->when($month !== null, fn ($query) => $query->whereMonth('schedule_computer.tanggal_inspection', $month))
+            ->when($month === null && $quarter !== null, fn ($query) => $query->where('schedule_computer.quarter', $quarter))
             ->get();
 
         $summary = collect($schedules)->groupBy(fn ($item) => Carbon::parse($item->tanggal_inspection)->format('F'))
@@ -188,8 +193,9 @@ class InspectionScheduleApiController extends Controller
 
         $stats = DB::table('schedule_computer')
             ->where('site', $site)
-            ->where('quarter', $quarter)
             ->where('tahun', $year)
+            ->when($month !== null, fn ($query) => $query->whereMonth('tanggal_inspection', $month))
+            ->when($month === null && $quarter !== null, fn ($query) => $query->where('quarter', $quarter))
             ->whereNotNull('actual_inspection')
             ->selectRaw("SUM(CASE WHEN DATE(actual_inspection) = DATE(tanggal_inspection) THEN 1 ELSE 0 END) AS sudahSesuai, SUM(CASE WHEN DATE(actual_inspection) != DATE(tanggal_inspection) THEN 1 ELSE 0 END) AS belumSesuai, COUNT(*) AS total")
             ->first();
@@ -197,14 +203,14 @@ class InspectionScheduleApiController extends Controller
         return [$schedules, $summary, $stats];
     }
 
-    private function printerData(string $site, int $year, int $month): array
+    private function printerData(string $site, int $year, ?int $month = null): array
     {
         $schedules = DB::table('schedule_printer')
             ->join('inv_printers', 'schedule_printer.id_printer', '=', 'inv_printers.id')
             ->select('schedule_printer.id', 'schedule_printer.tanggal_inspection', 'schedule_printer.actual_inspection', 'inv_printers.printer_code AS device_code', 'inv_printers.department AS dept', 'inv_printers.site')
             ->where('schedule_printer.site', $site)
-            ->where('schedule_printer.bulan', $month)
             ->where('schedule_printer.tahun', $year)
+            ->when($month !== null, fn ($query) => $query->where('schedule_printer.bulan', $month))
             ->get();
 
         $summary = collect($schedules)->groupBy(fn ($item) => Carbon::parse($item->tanggal_inspection)->format('F'))
@@ -216,7 +222,7 @@ class InspectionScheduleApiController extends Controller
         $stats = DB::table('schedule_printer')
             ->where('site', $site)
             ->where('tahun', $year)
-            ->where('bulan', $month)
+            ->when($month !== null, fn ($query) => $query->where('bulan', $month))
             ->whereNotNull('actual_inspection')
             ->selectRaw("SUM(CASE WHEN DATE(actual_inspection) = DATE(tanggal_inspection) THEN 1 ELSE 0 END) AS sudahSesuai, SUM(CASE WHEN DATE(actual_inspection) != DATE(tanggal_inspection) THEN 1 ELSE 0 END) AS belumSesuai, COUNT(*) AS total")
             ->first();
@@ -224,24 +230,30 @@ class InspectionScheduleApiController extends Controller
         return [$schedules, $summary, $stats];
     }
 
-    private function mobileTowerData(string $site, int $year, int $month): array
+    private function mobileTowerData(string $site, int $year, ?int $month = null): array
     {
         $schedules = DB::table('schedule_mobile_tower')
             ->join('inv_mobile_towers', 'schedule_mobile_tower.id_mobile_tower', '=', 'inv_mobile_towers.id')
             ->select('schedule_mobile_tower.id', 'schedule_mobile_tower.tanggal_inspection', 'schedule_mobile_tower.actual_inspection', 'inv_mobile_towers.mt_code AS device_code', 'schedule_mobile_tower.site')
             ->where('schedule_mobile_tower.site', $site)
-            ->where('schedule_mobile_tower.bulan', $month)
             ->where('schedule_mobile_tower.tahun', $year)
+            ->when($month !== null, fn ($query) => $query->where('schedule_mobile_tower.bulan', $month))
             ->get();
+
+        $summary = collect($schedules)->groupBy(fn ($item) => Carbon::parse($item->tanggal_inspection)->format('F'))
+            ->map(fn ($group) => [
+                'month' => Carbon::parse($group->first()->tanggal_inspection)->format('F'),
+                'departments' => [],
+            ])->values();
 
         $stats = DB::table('schedule_mobile_tower')
             ->where('site', $site)
             ->where('tahun', $year)
-            ->where('bulan', $month)
+            ->when($month !== null, fn ($query) => $query->where('bulan', $month))
             ->whereNotNull('actual_inspection')
             ->selectRaw("SUM(CASE WHEN DATE(actual_inspection) = DATE(tanggal_inspection) THEN 1 ELSE 0 END) AS sudahSesuai, SUM(CASE WHEN DATE(actual_inspection) != DATE(tanggal_inspection) THEN 1 ELSE 0 END) AS belumSesuai, COUNT(*) AS total")
             ->first();
 
-        return [$schedules, [], $stats];
+        return [$schedules, $summary, $stats];
     }
 }

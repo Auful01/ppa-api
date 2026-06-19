@@ -5,6 +5,11 @@ namespace App\Http\Controllers\Api;
 use App\Exports\MonitoringJobsExport;
 use App\Http\Controllers\Controller;
 use App\Models\DailyJob;
+use App\Models\InvCctv;
+use App\Models\InvComputer;
+use App\Models\InvLaptop;
+use App\Models\InvPrinter;
+use App\Models\PerangkatBreakdown;
 use App\Models\RootCauseCategories;
 use App\Models\RootCauseProblem;
 use App\Models\User;
@@ -533,6 +538,12 @@ class OperationsApiController extends Controller
             'users'         => $this->siteCrewOptions($site),
             'shift_options' => $this->shiftOptions(),
             'categories'    => RootCauseCategories::where('site_type', 'SITE')->pluck('category_root_cause'),
+            // Web UnscheduleJobController@create also passes `categoriesBd` — the
+            // breakdown-enabled categories used by the "Enable Category and
+            // Inventory Number" section (root_cause_categories where breakdown=1).
+            'categoriesBd'  => RootCauseCategories::where('breakdown', 1)
+                ->select('id', 'category_root_cause')
+                ->get(),
         ]);
     }
 
@@ -568,11 +579,16 @@ class OperationsApiController extends Controller
             'jobs.*.end_progress'     => ['nullable', 'date'],
             'jobs.*.category'         => ['required', 'string'],
             'jobs.*.root_cause_problem' => ['nullable', 'string'],
+            // "Enable Category and Inventory Number" section (web parity):
+            'jobs.*.inventory'          => ['nullable', 'string'],
+            'jobs.*.category_breakdown' => ['nullable', 'string'],
         ]);
 
         foreach ($validated['jobs'] as $job) {
+            $code = ! empty($job['code']) ? $job['code'] : $this->generateJobCode('UJ');
+
             DailyJob::create([
-                'code'          => ! empty($job['code']) ? $job['code'] : $this->generateJobCode('UJ'),
+                'code'          => $code,
                 'category_job'  => 'unschedule',
                 'description'   => $job['job'],
                 'issue'         => $job['issue'] ?? null,
@@ -591,9 +607,66 @@ class OperationsApiController extends Controller
                 'root_cause'    => $job['root_cause_problem'] ?? null,
                 'created_by'    => $request->user()->id,
             ]);
+
+            // Mirror UnscheduleJobController@store: when an inventory number was
+            // chosen (toggle ON), record a PerangkatBreakdown, resolving the
+            // device from the matching inventory table by its code.
+            if (! empty($job['inventory'])) {
+                $this->createBreakdownRecord($request, $site, $code, $job);
+            }
         }
 
         return response()->json(['message' => 'Unscheduled jobs created successfully.'], 201);
+    }
+
+    private function createBreakdownRecord(Request $request, string $site, string $code, array $job): void
+    {
+        $now = Carbon::now();
+        $categoryInput = strtoupper((string) ($job['category_breakdown'] ?? ''));
+
+        $deviceName     = 'Unknown Device';
+        $deviceLocation = '';
+        $idPerangkat    = 'unknown ID';
+
+        $inv = match ($categoryInput) {
+            'LAPTOP'   => InvLaptop::where('laptop_code', $job['inventory'])->first(),
+            'COMPUTER' => InvComputer::where('computer_code', $job['inventory'])->first(),
+            'PRINTER'  => InvPrinter::where('printer_code', $job['inventory'])->first(),
+            'CCTV'     => InvCctv::where('cctv_code', $job['inventory'])->first(),
+            default    => null,
+        };
+
+        if ($inv) {
+            $idPerangkat    = $inv->id;
+            $deviceLocation = $inv->location ?? '';
+            $deviceName = match ($categoryInput) {
+                'LAPTOP'   => $inv->laptop_name,
+                'COMPUTER' => $inv->computer_name,
+                'PRINTER'  => $inv->printer_brand,
+                'CCTV'     => $inv->cctv_brand,
+                default    => $deviceName,
+            };
+        }
+
+        PerangkatBreakdown::create([
+            'id_report'           => $code,
+            'id_perangkat'        => $idPerangkat,
+            'inventory_number'    => $job['inventory'],
+            'device_name'         => $deviceName,
+            'category_breakdown'  => $categoryInput !== '' ? $categoryInput : null,
+            'device_category'     => $job['category'] ?? null,
+            'pic'                 => $request->user()->name,
+            'start_time'          => $job['start_progress'] ?? null,
+            'end_time'            => $job['end_progress'] ?? null,
+            'created_date'        => $now->toDateString(),
+            'month'               => $now->month,
+            'year'                => $now->year,
+            'root_cause'          => $job['root_cause_problem'] ?? null,
+            'root_cause_category' => $job['category'] ?? null,
+            'location'            => $deviceLocation,
+            'status'              => strtoupper((string) ($job['status'] ?? 'open')),
+            'site'                => $request->user()->site,
+        ]);
     }
 
     public function unscheduleShow(Request $request, string $code)

@@ -10,6 +10,7 @@ class PerangkatBreakdown extends Model
     use HasFactory;
     protected $fillable = [
         'device_category',
+        'category_breakdown',
         'id_report',
         'inventory_number',
         'id_perangkat',

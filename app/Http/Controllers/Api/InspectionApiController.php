@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\PicaInspeksi;
 use App\Support\Api\InspectionRegistry;
 use App\Support\Api\SiteContext;
 use Illuminate\Database\Eloquent\Model;
@@ -88,6 +89,28 @@ class InspectionApiController extends Controller
                 $config['inventory_model']::where('id', $inventoryId)
                     ->update(['status' => $payload['inventory_status']]);
             }
+        }
+
+        // Mirror web behavior (Inspeksi{Computer,Laptop,Printer,MobileTower}Controller@store):
+        // whenever the inspection carries a finding, a PICA record is auto-created/updated
+        // (keyed on inspeksi_id) so the finding shows up on the PICA Inspeksi page without a
+        // separate manual entry. No finding submitted ⇒ no PICA, exactly like `if ($request->findings)`.
+        if ($request->filled('findings')) {
+            PicaInspeksi::updateOrCreate(
+                ['inspeksi_id' => $inspection->id],
+                [
+                    'pica_number'  => $inspection->getAttribute('pica_number') ?? '0',
+                    'temuan'       => $inspection->getAttribute('findings'),
+                    'tindakan'     => $inspection->getAttribute('findings_action'),
+                    'due_date'     => $inspection->getAttribute('due_date'),
+                    'remark'       => $inspection->getAttribute('remarks'),
+                    'status_pica'  => $inspection->getAttribute('findings_status'),
+                    'foto_temuan'  => $inspection->getAttribute('findings_image'),
+                    'foto_tindakan' => $inspection->getAttribute('action_image'),
+                    'close_by'     => $request->user()?->name,
+                    'site'         => $inspection->getAttribute($config['site_column']),
+                ]
+            );
         }
 
         return response()->json([
