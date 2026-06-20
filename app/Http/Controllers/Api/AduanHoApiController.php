@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Aduan;
 use App\Models\UserAll;
+use App\Services\ImageOptimizerService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -174,7 +175,7 @@ class AduanHoApiController extends Controller
         ];
 
         if ($request->hasFile('image')) {
-            $payload['complaint_image'] = url('storage/' . $request->file('image')->store('images', 'public'));
+            $payload['complaint_image'] = url('storage/' . ImageOptimizerService::storeAndOptimize($request->file('image'), 'images'));
         }
 
         $aduan = Aduan::create($payload);

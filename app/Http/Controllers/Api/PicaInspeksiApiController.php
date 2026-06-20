@@ -9,6 +9,7 @@ use App\Models\InspeksiMobileTower;
 use App\Models\InspeksiPrinter;
 use App\Models\PicaInspeksi;
 use App\Models\User;
+use App\Services\ImageOptimizerService;
 use App\Support\Api\SiteContext;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -110,17 +111,17 @@ class PicaInspeksiApiController extends Controller
         $this->authorizeRecordSite($request, $existing);
 
         if ($request->hasFile('image_temuan')) {
-            $data['findings_image'] = url('storage/' . $request->file('image_temuan')->store('images', 'public'));
+            $data['findings_image'] = url('storage/' . ImageOptimizerService::storeAndOptimize($request->file('image_temuan'), 'images'));
             $dataPica['foto_temuan'] = $data['findings_image'];
         }
 
         if ($request->hasFile('image_tindakan')) {
-            $data['action_image'] = url('storage/' . $request->file('image_tindakan')->store('images', 'public'));
+            $data['action_image'] = url('storage/' . ImageOptimizerService::storeAndOptimize($request->file('image_tindakan'), 'images'));
             $dataPica['foto_tindakan'] = $data['action_image'];
         }
 
         if ($request->hasFile('image_inspeksi')) {
-            $data['inspection_image'] = url('storage/' . $request->file('image_inspeksi')->store('images', 'public'));
+            $data['inspection_image'] = url('storage/' . ImageOptimizerService::storeAndOptimize($request->file('image_inspeksi'), 'images'));
         }
 
         if (($params['device_type'] ?? null) === 'Mobile Tower') {

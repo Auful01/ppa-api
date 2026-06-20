@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\DispatchVhms;
 use App\Models\kpiVhms;
+use App\Services\ImageOptimizerService;
 use App\Support\Api\SiteContext;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -122,7 +123,7 @@ class KpiVhmsApiController extends Controller
         $result = [];
 
         if ($request->hasFile('evidence_image')) {
-            $pathEvidenceImage = $request->file('evidence_image')->store('images', 'public');
+            $pathEvidenceImage = ImageOptimizerService::storeAndOptimize($request->file('evidence_image'), 'images');
             $result['insertDataEvidenceImage'] = DB::table('kpi_vhms_evidence')->insert([
                 'week_data' => $validated['week_data'],
                 'evidence_image' => 'storage/' . $pathEvidenceImage,

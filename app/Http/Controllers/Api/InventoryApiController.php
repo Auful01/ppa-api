@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Aduan;
 use App\Models\Department;
 use App\Models\UserAll;
+use App\Services\ImageOptimizerService;
 use App\Support\Api\InventoryRegistry;
 use App\Support\Api\SiteContext;
 use Carbon\Carbon;
@@ -161,7 +162,7 @@ class InventoryApiController extends Controller
         }
 
         if ($request->hasFile('image') && in_array('link_documentation_asset_image', $record->getFillable(), true)) {
-            $payload['link_documentation_asset_image'] = $request->file('image')->store('images', 'public');
+            $payload['link_documentation_asset_image'] = ImageOptimizerService::storeAndOptimize($request->file('image'), 'images');
         }
 
         $created = $modelClass::create($payload);
@@ -190,7 +191,7 @@ class InventoryApiController extends Controller
         $payload = $this->normalizePayload($payload, $recordSite, $record);
 
         if ($request->hasFile('image') && in_array('link_documentation_asset_image', $record->getFillable(), true)) {
-            $payload['link_documentation_asset_image'] = $request->file('image')->store('images', 'public');
+            $payload['link_documentation_asset_image'] = ImageOptimizerService::storeAndOptimize($request->file('image'), 'images');
         }
 
         $record->update($payload);

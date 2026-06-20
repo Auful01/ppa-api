@@ -24,6 +24,12 @@ class ChartInspeksiApiController extends Controller
             'persenKomputer' => [],
             'persenPrinter' => [],
             'persenMT' => [],
+            'summary' => [
+                'laptop' => $this->summary(InspeksiLaptop::query(), $site, $year, null),
+                'komputer' => $this->summary(InspeksiComputer::query(), $site, $year, null),
+                'printer' => $this->summary(InspeksiPrinter::query(), $site, $year, null),
+                'mobile_tower' => $this->summary(InspeksiMobileTower::query(), $site, $year, null),
+            ],
         ];
 
         for ($quarter = 1; $quarter <= 4; $quarter++) {
@@ -65,5 +71,29 @@ class ChartInspeksiApiController extends Controller
         }
 
         return round(($inspected / $total) * 100, 2);
+    }
+
+    private function summary($query, ?string $site, int $year, ?array $extraWhere): array
+    {
+        SiteContext::apply($query, 'site', $site)->where('year', $year);
+
+        if ($extraWhere) {
+            foreach ($extraWhere as $column => $value) {
+                $query->where($column, $value);
+            }
+        }
+
+        $total = (clone $query)->count();
+        $inspected = (clone $query)->where('inspection_status', 'Y')->count();
+        $pending = max($total - $inspected, 0);
+
+        return [
+            'total' => $total,
+            'inspected' => $inspected,
+            'pending' => $pending,
+            'inspected_percent' => $total === 0 ? 0 : round(($inspected / $total) * 100, 2),
+            'pending_percent' => $total === 0 ? 0 : round(($pending / $total) * 100, 2),
+            'target_percent' => 95,
+        ];
     }
 }

@@ -12,6 +12,7 @@ use App\Models\PerangkatBreakdown;
 use App\Models\RootCauseProblem;
 use App\Models\User;
 use App\Models\UserAll;
+use App\Services\ImageOptimizerService;
 use App\Support\Api\SiteContext;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -283,7 +284,7 @@ class AduanApiController extends Controller
         ];
 
         if ($request->hasFile('image')) {
-            $payload['complaint_image'] = url('storage/' . $request->file('image')->store('images', 'public'));
+            $payload['complaint_image'] = url('storage/' . ImageOptimizerService::storeAndOptimize($request->file('image'), 'images'));
         }
 
         $aduan = Aduan::create($payload);
@@ -378,7 +379,7 @@ class AduanApiController extends Controller
         $aduan->fill($validated);
 
         if ($request->hasFile('image')) {
-            $aduan->repair_image = url('storage/' . $request->file('image')->store('images', 'public'));
+            $aduan->repair_image = url('storage/' . ImageOptimizerService::storeAndOptimize($request->file('image'), 'images'));
         }
 
         if (! empty($validated['date_of_complaint']) && ! empty($validated['start_response'])) {

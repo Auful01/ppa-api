@@ -9,6 +9,7 @@ use App\Models\InvLaptop;
 use App\Models\PengalihanAsset;
 use App\Models\User;
 use App\Models\UserAll;
+use App\Services\ImageOptimizerService;
 use App\Support\Api\SiteContext;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -198,7 +199,7 @@ class PengalihanAssetApiController extends Controller
         }
 
         $imagePath = $request->hasFile('image')
-            ? url('storage/' . $request->file('image')->store('images', 'public'))
+            ? url('storage/' . ImageOptimizerService::storeAndOptimize($request->file('image'), 'images'))
             : null;
 
         $inventoryModel = $validated['deviceType'] === 'Laptop' ? InvLaptop::class : InvComputer::class;

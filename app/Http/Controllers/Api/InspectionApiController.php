@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\PicaInspeksi;
+use App\Services\ImageOptimizerService;
 use App\Support\Api\InspectionRegistry;
 use App\Support\Api\SiteContext;
 use Illuminate\Database\Eloquent\Model;
@@ -68,7 +69,7 @@ class InspectionApiController extends Controller
 
         foreach (['findings_image', 'action_image', 'inspection_image', 'nozle_image'] as $fileField) {
             if ($request->hasFile($fileField)) {
-                $payload[$fileField] = $request->file($fileField)->store('images', 'public');
+                $payload[$fileField] = ImageOptimizerService::storeAndOptimize($request->file($fileField), 'images');
             }
         }
 

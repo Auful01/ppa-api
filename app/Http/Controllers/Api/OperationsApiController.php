@@ -170,9 +170,11 @@ class OperationsApiController extends Controller
             ->whereIn('category_job', ['assignment', 'support'])
             ->firstOrFail();
 
-        if ($this->jobIsApproved($job)) {
-            abort(403, 'Job sudah di-approve dan tidak bisa diedit.');
-        }
+        // NOTE: approval status must NOT gate CRUD. Web Inertia
+        // (DailyJobController/UnscheduleJobController@update) only checks role
+        // permission, never approval — approve affects export eligibility only.
+        // Previously this aborted 403 when approval_status === 'approved'; that
+        // restriction has been removed to match the web behavior exactly.
 
         $validated = $request->validate([
             'description'    => ['sometimes', 'string'],
@@ -210,9 +212,11 @@ class OperationsApiController extends Controller
             ->whereIn('category_job', ['assignment', 'support'])
             ->firstOrFail();
 
-        if ($this->jobIsApproved($job)) {
-            abort(403, 'Job sudah di-approve dan tidak bisa dihapus.');
-        }
+        // NOTE: approval status must NOT gate CRUD. Web Inertia
+        // (DailyJobController/UnscheduleJobController@destroy) only checks role
+        // permission, never approval — approve affects export eligibility only.
+        // Previously this aborted 403 when approval_status === 'approved'; that
+        // restriction has been removed to match the web behavior exactly.
 
         $job->delete();
 
