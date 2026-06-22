@@ -27,8 +27,8 @@ class ChartInspeksiApiController extends Controller
             'summary' => [
                 'laptop' => $this->summary(InspeksiLaptop::query(), $site, $year, null),
                 'komputer' => $this->summary(InspeksiComputer::query(), $site, $year, null),
-                'printer' => $this->summary(InspeksiPrinter::query(), $site, $year, null),
-                'mobile_tower' => $this->summary(InspeksiMobileTower::query(), $site, $year, null),
+                'printer' => $this->summary(InspeksiPrinter::query(), $site, $year, null, true),
+                'mobile_tower' => $this->summary(InspeksiMobileTower::query(), $site, $year, null, true),
             ],
         ];
 
@@ -39,12 +39,14 @@ class ChartInspeksiApiController extends Controller
         }
 
         for ($month = 1; $month <= 12; $month++) {
+            // Printer/MT mirror ChartInspeksi*Controller@countKpi: the denominator
+            // excludes rows with inspection_status === '-' (where('inspection_status','!=','-')).
             $chartData['persenPrinter'][] = $this->percentage(InspeksiPrinter::query(), $site, $year, [
                 'month' => $month,
-            ]);
+            ], true);
             $chartData['persenMT'][] = $this->percentage(InspeksiMobileTower::query(), $site, $year, [
                 'month' => $month,
-            ]);
+            ], true);
         }
 
         return response()->json([
@@ -53,7 +55,7 @@ class ChartInspeksiApiController extends Controller
         ]);
     }
 
-    private function percentage($query, ?string $site, int $year, ?array $extraWhere): float
+    private function percentage($query, ?string $site, int $year, ?array $extraWhere, bool $excludeDash = false): float
     {
         SiteContext::apply($query, 'site', $site)->where('year', $year);
 
@@ -63,7 +65,10 @@ class ChartInspeksiApiController extends Controller
             }
         }
 
-        $total = (clone $query)->count();
+        // Web parity: Printer/MT exclude inspection_status === '-' from the total.
+        $total = (clone $query)
+            ->when($excludeDash, fn ($q) => $q->where('inspection_status', '!=', '-'))
+            ->count();
         $inspected = (clone $query)->where('inspection_status', 'Y')->count();
 
         if ($total === 0) {
@@ -73,7 +78,7 @@ class ChartInspeksiApiController extends Controller
         return round(($inspected / $total) * 100, 2);
     }
 
-    private function summary($query, ?string $site, int $year, ?array $extraWhere): array
+    private function summary($query, ?string $site, int $year, ?array $extraWhere, bool $excludeDash = false): array
     {
         SiteContext::apply($query, 'site', $site)->where('year', $year);
 
@@ -83,7 +88,9 @@ class ChartInspeksiApiController extends Controller
             }
         }
 
-        $total = (clone $query)->count();
+        $total = (clone $query)
+            ->when($excludeDash, fn ($q) => $q->where('inspection_status', '!=', '-'))
+            ->count();
         $inspected = (clone $query)->where('inspection_status', 'Y')->count();
         $pending = max($total - $inspected, 0);
 

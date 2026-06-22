@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\KategoriInspeksi;
 use App\Models\PicaInspeksi;
 use App\Services\ImageOptimizerService;
 use App\Support\Api\InspectionRegistry;
@@ -47,13 +48,27 @@ class InspectionApiController extends Controller
     public function show(Request $request, string $type, string $id)
     {
         $config = InspectionRegistry::get($type);
+        $inspection = $this->authorizedInspectionQuery($request, $config)
+            ->with($config['relations'] ?? [])
+            ->findOrFail($id);
 
-        return response()->json([
+        $payload = [
             'type' => $type,
-            'data' => $this->authorizedInspectionQuery($request, $config)
-                ->with($config['relations'] ?? [])
-                ->findOrFail($id),
-        ]);
+            'data' => $inspection,
+        ];
+
+        if ($type === 'mobile-tower') {
+            $payload['dataKategori'] = KategoriInspeksi::where('kategori_inspeksi', 'MT')
+                ->where('parent', 0)
+                ->orderBy('urutan', 'ASC')
+                ->get();
+            $payload['subDataKategori'] = KategoriInspeksi::where('kategori_inspeksi', 'MT')
+                ->where('parent', '!=', 0)
+                ->orderBy('urutan', 'ASC')
+                ->get();
+        }
+
+        return response()->json($payload);
     }
 
     public function update(Request $request, string $type, string $id)
