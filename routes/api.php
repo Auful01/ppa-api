@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\ChartInspeksiApiController;
 use App\Http\Controllers\Api\DashboardAllSiteApiController;
 use App\Http\Controllers\Api\DashboardApiController;
 use App\Http\Controllers\Api\DepartmentApiController;
+use App\Http\Controllers\Api\DeviceTokenApiController;
 use App\Http\Controllers\Api\InspectionApiController;
 use App\Http\Controllers\Api\InspectionScheduleApiController;
 use App\Http\Controllers\Api\InventoryApiController;
@@ -33,6 +34,10 @@ Route::prefix('auth')->group(function () {
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/sites', [SiteApiController::class, 'index']);
+
+    // FCM device token registration (Aduan push notifications).
+    Route::post('/device-token', [DeviceTokenApiController::class, 'store']);
+    Route::delete('/device-token', [DeviceTokenApiController::class, 'destroy']);
 
     Route::get('/dashboard', DashboardApiController::class);
     Route::get('/dashboard/all-site', DashboardAllSiteApiController::class);

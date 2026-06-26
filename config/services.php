@@ -35,4 +35,12 @@ return [
         ],
     ],
 
+    // Firebase Cloud Messaging (Aduan push notifications). Leave unset to disable
+    // pushes (PushNotificationService becomes a no-op). See
+    // docs/ADUAN_PUSH_NOTIFICATION.md for setup.
+    'fcm' => [
+        'credentials' => env('FCM_CREDENTIALS'), // absolute path to service-account.json
+        'project_id'  => env('FCM_PROJECT_ID'),  // optional; falls back to the json
+    ],
+
 ];
