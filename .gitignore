@@ -19,3 +19,5 @@ yarn-error.log
 /.idea
 /.vscode
 /docs
+
+/storage/firebase/service-account.json
