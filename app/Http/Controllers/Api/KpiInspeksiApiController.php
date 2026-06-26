@@ -38,12 +38,33 @@ class KpiInspeksiApiController extends Controller
 
         $modelClass = self::DEVICE_MODELS[$deviceType] ?? InspeksiLaptop::class;
 
-        // Year summary (panel "Ringkasan Tahun"). Independent of chart dimension.
-        // SCRAP must be EXCLUDED from the denominator (client requirement + web
-        // parity): only "Sudah Inspeksi" (Y) and "Belum Inspeksi" (N) count.
-        $total  = $this->applyScrapFilter($modelClass::where('site', $site)->where('year', $year), $deviceType)->count();
-        $sudah  = $this->applyScrapFilter($modelClass::where('site', $site)->where('year', $year), $deviceType)->where('inspection_status', 'Y')->count();
-        $belum  = $this->applyScrapFilter($modelClass::where('site', $site)->where('year', $year), $deviceType)->where('inspection_status', 'N')->count();
+        // Summary card (Total / Sudah / Belum / Achievement).
+        //
+        // ROOT CAUSE of the "Total 132 vs aktual ~67" Mobile Tower bug: this used
+        // to scope the summary to the whole YEAR (`where('year', $year)` only).
+        // MT/Printer are inspected MONTHLY and Computer QUARTERLY, so a year scope
+        // counts the SAME unit once per month/quarter → ~2 months × 67 units ≈ 132,
+        // while the chart (single current period) correctly showed 67 → 100%.
+        //
+        // Fix: scope the summary to the SAME period the chart uses per device, so
+        // the card always agrees with the graph:
+        //   laptop        → year (yearly inspection: 1 row/unit/year)
+        //   computer      → current/selected quarter (1 row/unit/quarter)
+        //   printer / MT  → current/selected month   (1 row/unit/month)
+        // SCRAP is excluded from the denominator (client requirement + web parity).
+        $summaryBase = function () use ($modelClass, $site, $deviceType, $year, $quarter, $month) {
+            $q = $modelClass::where('site', $site)->where('year', $year);
+            if ($deviceType === 'computer') {
+                $q->where('triwulan', $quarter ?: ((int) ceil(Carbon::now()->month / 3)));
+            } elseif ($deviceType === 'printer' || $deviceType === 'mobile_tower') {
+                $q->where('month', $month ?: Carbon::now()->month);
+            }
+            return $this->applyScrapFilter($q, $deviceType);
+        };
+
+        $total  = (clone $summaryBase())->count();
+        $sudah  = (clone $summaryBase())->where('inspection_status', 'Y')->count();
+        $belum  = (clone $summaryBase())->where('inspection_status', 'N')->count();
 
         $percentSudah = $total > 0 ? round(($sudah / $total) * 100, 2) : 0;
         $percentBelum = $total > 0 ? round(($belum / $total) * 100, 2) : 0;
