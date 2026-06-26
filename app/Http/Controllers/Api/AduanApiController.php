@@ -37,6 +37,20 @@ class AduanApiController extends Controller
             $query->where('category_name', $request->string('category_name'));
         }
 
+        // Global server-side search (web DataTable parity) so a keyword matches a
+        // ticket on ANY page, not just the rows already loaded client-side.
+        if ($request->filled('search')) {
+            $term = '%' . addcslashes((string) $request->string('search'), '%_\\') . '%';
+            $cols = ['complaint_code', 'complaint_name', 'complaint_note', 'category_name',
+                'nrp', 'location', 'detail_location', 'status', 'urgency', 'crew',
+                'inventory_number', 'action_repair', 'repair_note'];
+            $query->where(function ($q) use ($cols, $term) {
+                foreach ($cols as $i => $col) {
+                    $i === 0 ? $q->where($col, 'like', $term) : $q->orWhere($col, 'like', $term);
+                }
+            });
+        }
+
         $aduan = $query
             ->orderByRaw("
                 CASE

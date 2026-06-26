@@ -22,6 +22,47 @@ class InspectionApiController extends Controller
         $query = $model::query()->with($config['relations'] ?? []);
         SiteContext::apply($query, $config['site_column'], $site);
 
+        // Global server-side search (web DataTable parity). Matches the term in the
+        // inspection's own searchable columns OR in the eager-loaded asset relation
+        // (inventory/computer/printer/mt) and its user, so a keyword like a partial
+        // inventory code (e.g. "hcg-010") is found regardless of which paginated
+        // page the record would land on. Own columns are intersected with the
+        // model's fillable so a type that lacks a column never breaks the query.
+        if ($request->filled('search')) {
+            $raw  = (string) $request->string('search');
+            $term = '%' . addcslashes($raw, '%_\\') . '%';
+            $ownCols = array_values(array_intersect(
+                $config['search_own'] ?? [],
+                (new $model())->getFillable()
+            ));
+            $relation     = $config['search_relation'] ?? null;
+            $relationCols = $config['search_relation_cols'] ?? [];
+            $userRelation = $config['search_user_relation'] ?? null;
+            $userCols     = $config['search_user_cols'] ?? [];
+
+            $orLike = function ($builder, array $cols) use ($term) {
+                $builder->where(function ($inner) use ($cols, $term) {
+                    foreach (array_values($cols) as $i => $col) {
+                        $i === 0
+                            ? $inner->where($col, 'like', $term)
+                            : $inner->orWhere($col, 'like', $term);
+                    }
+                });
+            };
+
+            $query->where(function ($outer) use ($term, $ownCols, $relation, $relationCols, $userRelation, $userCols, $orLike) {
+                foreach ($ownCols as $col) {
+                    $outer->orWhere($col, 'like', $term);
+                }
+                if ($relation && ! empty($relationCols)) {
+                    $outer->orWhereHas($relation, fn ($r) => $orLike($r, $relationCols));
+                }
+                if ($userRelation && ! empty($userCols)) {
+                    $outer->orWhereHas($userRelation, fn ($u) => $orLike($u, $userCols));
+                }
+            });
+        }
+
         if ($request->filled('year')) {
             $query->where('year', $request->integer('year'));
         }

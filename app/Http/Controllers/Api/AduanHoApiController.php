@@ -59,12 +59,27 @@ class AduanHoApiController extends Controller
         $nrp  = $user->nrp;
         $site = strtoupper((string) $user->site); // site_pelapor scope = reporter's own site
 
-        // VERBATIM AduanHoController@index list query.
-        $aduan = Aduan::query()
+        // VERBATIM AduanHoController@index list query (+ optional server-side
+        // global search so a keyword matches a ticket on ANY page).
+        $listQuery = Aduan::query()
             ->with('rootCause')
             ->where('nrp', $nrp)
             ->where('site', 'HO')
-            ->where('site_pelapor', $site)
+            ->where('site_pelapor', $site);
+
+        if ($request->filled('search')) {
+            $term = '%' . addcslashes((string) $request->string('search'), '%_\\') . '%';
+            $cols = ['complaint_code', 'complaint_name', 'complaint_note', 'category_name',
+                'nrp', 'location', 'detail_location', 'status', 'urgency',
+                'inventory_number'];
+            $listQuery->where(function ($q) use ($cols, $term) {
+                foreach ($cols as $i => $col) {
+                    $i === 0 ? $q->where($col, 'like', $term) : $q->orWhere($col, 'like', $term);
+                }
+            });
+        }
+
+        $aduan = $listQuery
             ->orderByDesc('date_of_complaint')
             ->paginate((int) $request->integer('per_page', 25));
 
