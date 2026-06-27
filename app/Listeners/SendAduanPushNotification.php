@@ -7,6 +7,7 @@ use App\Events\AduanCreated;
 use App\Events\AduanUpdated;
 use App\Models\User;
 use App\Services\PushNotificationService;
+use App\Support\AduanPushNotifier;
 use Illuminate\Contracts\Queue\ShouldQueue;
 
 /**
@@ -19,35 +20,34 @@ use Illuminate\Contracts\Queue\ShouldQueue;
  */
 class SendAduanPushNotification implements ShouldQueue
 {
-    public function __construct(private PushNotificationService $push)
-    {
+    public function __construct(
+        private PushNotificationService $push,
+        private AduanPushNotifier $notifier,
+    ) {
     }
 
     public function handle(AduanCreated|AduanAssigned|AduanUpdated $event): void
     {
         $aduan = $event->aduan;
 
-        [$title, $body] = match (true) {
-            $event instanceof AduanCreated  => [
-                'Aduan Baru!',
-                $this->summary($aduan),
-            ],
-            $event instanceof AduanAssigned => [
-                'Aduan Ditugaskan',
-                $this->summary($aduan),
-            ],
-            default => [
-                'Update Aduan',
-                $this->summary($aduan),
-            ],
-        };
+        // CREATE is deduplicated with the `aduan:watch` daemon via the shared
+        // push_sent_at claim, so a mobile-created aduan is never pushed twice
+        // (once here, once by the watcher). The watcher handles web-created rows.
+        if ($event instanceof AduanCreated) {
+            $this->notifier->created($aduan);
+            return;
+        }
+
+        // Assignment / status update — these only originate from THIS API project
+        // (mobile), so no checkpoint is needed; deliver immediately.
+        $title = $event instanceof AduanAssigned ? 'Aduan Ditugaskan' : 'Update Aduan';
 
         $recipients = User::where('site', $aduan->site)->get();
         if ($recipients->isEmpty()) {
             return;
         }
 
-        $this->push->sendToUsers($recipients, $title, $body, [
+        $this->push->sendToUsers($recipients, $title, AduanPushNotifier::summary($aduan), [
             // Tapping the notification opens this aduan (mobile reads `aduan_id`).
             'type'           => 'aduan',
             'aduan_id'       => $aduan->id,
@@ -55,13 +55,5 @@ class SendAduanPushNotification implements ShouldQueue
             'site'           => (string) ($aduan->site ?? ''),
             'status'         => (string) ($aduan->status ?? ''),
         ]);
-    }
-
-    private function summary(\App\Models\Aduan $aduan): string
-    {
-        $note = trim((string) ($aduan->complaint_note ?? ''));
-        $code = trim((string) ($aduan->complaint_code ?? ''));
-        $text = $note !== '' ? $note : 'Lihat detail aduan.';
-        return $code !== '' ? "[$code] $text" : $text;
     }
 }
