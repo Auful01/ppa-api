@@ -6,6 +6,7 @@ use App\Events\AduanAssigned;
 use App\Events\AduanCreated;
 use App\Events\AduanUpdated;
 use App\Models\Aduan;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Event-driven trigger for Aduan push notifications. Hooking the Eloquent model
@@ -19,11 +20,20 @@ class AduanObserver
 {
     public function created(Aduan $aduan): void
     {
+        // Lightweight diagnostic so production can confirm the observer fires on
+        // a web-created aduan (low volume — only on aduan create). Safe to drop
+        // once the push pipeline is verified end-to-end in production.
+        Log::info('[ADUAN-PUSH] observer.created fired', [
+            'id' => $aduan->id, 'complaint_code' => $aduan->complaint_code, 'site' => $aduan->site,
+        ]);
         AduanCreated::dispatch($aduan);
     }
 
     public function updated(Aduan $aduan): void
     {
+        Log::info('[ADUAN-PUSH] observer.updated fired', [
+            'id' => $aduan->id, 'crew_changed' => $aduan->wasChanged('crew'),
+        ]);
         // A change to the crew column is an "assignment"; anything else is a
         // generic update (status / progress / note).
         if ($aduan->wasChanged('crew')) {
